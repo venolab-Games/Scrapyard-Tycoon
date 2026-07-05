@@ -22,6 +22,8 @@ jobs:
 
       - name: Generate release metadata
         id: release
+        env:
+          GITHUB_REPOSITORY: ${{ github.repository }}
         run: python3 scripts/generate_release.py --notes-file release_notes.md --github-output "$GITHUB_OUTPUT"
 
       - name: Show generated release notes

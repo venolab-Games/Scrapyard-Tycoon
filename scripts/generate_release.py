@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 import re
 import subprocess
 from dataclasses import dataclass
@@ -40,6 +41,8 @@ BUMP_LEVELS = {
     "minor": 2,
     "major": 3,
 }
+
+DEFAULT_GITHUB_REPOSITORY = "venolab-Games/roblox-vehicle-tycoon"
 
 
 @dataclass
@@ -175,6 +178,16 @@ def section_for_commit(subject: str) -> str:
     return SECTION_TITLES.get(match.group("type"), "Other Changes")
 
 
+def get_commit_url(short_sha: str) -> str:
+    repository = os.environ.get("GITHUB_REPOSITORY", DEFAULT_GITHUB_REPOSITORY)
+    return f"https://github.com/{repository}/commit/{short_sha}"
+
+
+def format_commit_link(sha: str) -> str:
+    short_sha = sha[:7]
+    return f"[{short_sha}]({get_commit_url(short_sha)})"
+
+
 def build_release_notes(tag: str, commits: list[Commit], latest_tag: str | None) -> str:
     sections = {section: [] for section in SECTION_ORDER}
 
@@ -184,7 +197,7 @@ def build_release_notes(tag: str, commits: list[Commit], latest_tag: str | None)
         if is_breaking_change(commit, match):
             label = f"[BREAKING] {label}"
 
-        sections[section_for_commit(commit.subject)].append(f"- {label} ({commit.sha[:7]})")
+        sections[section_for_commit(commit.subject)].append(f"- {label} ({format_commit_link(commit.sha)})")
 
     compared_from = latest_tag if latest_tag else "the beginning of the repository"
     lines = [
