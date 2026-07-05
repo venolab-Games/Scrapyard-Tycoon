@@ -5,9 +5,9 @@ local CurrencyConfig = {
 	DisplayOrder = 10,
 	RemotesFolderName = "Remotes",
 	MotorPoolUpgradeRemoteName = "RequestMotorPoolUpgrade",
-	PASSIVE_PARTS_AMOUNT = 1,
-	PASSIVE_PARTS_INTERVAL_SECONDS = 5,
-	MOTOR_POOL_UPGRADE_COST = 25,
+	SCRAPYARD_PARTS_AMOUNT = 1,
+	SCRAPYARD_INCOME_INTERVAL_SECONDS = 2,
+	MOTOR_POOL_UPGRADE_COST = 10,
 	MOTOR_POOL_INCOME_BONUS_PER_LEVEL = 1,
 }
 

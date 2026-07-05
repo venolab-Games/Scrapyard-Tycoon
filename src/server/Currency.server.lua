@@ -6,7 +6,7 @@ local CurrencyConfig = require(ReplicatedStorage.Shared.CurrencyConfig)
 local STARTING_PARTS = 0
 local STARTING_MOTOR_POOL_LEVEL = 1
 
-local passiveIncomePlayers = {}
+local scrapyardIncomePlayers = {}
 
 local remotesFolder = ReplicatedStorage:FindFirstChild(CurrencyConfig.RemotesFolderName)
 if not remotesFolder then
@@ -34,30 +34,30 @@ local function getCurrencyValues(player)
 	return parts, motorPoolLevel
 end
 
-local function getPassiveIncomeAmount(motorPoolLevel)
+local function getScrapyardIncomeAmount(motorPoolLevel)
 	local levelBonus = math.max(motorPoolLevel.Value - 1, 0) * CurrencyConfig.MOTOR_POOL_INCOME_BONUS_PER_LEVEL
-	return CurrencyConfig.PASSIVE_PARTS_AMOUNT + levelBonus
+	return CurrencyConfig.SCRAPYARD_PARTS_AMOUNT + levelBonus
 end
 
-local function startPassiveIncome(player, parts, motorPoolLevel)
-	if passiveIncomePlayers[player] then
+local function startScrapyardIncome(player, parts, motorPoolLevel)
+	if scrapyardIncomePlayers[player] then
 		return
 	end
 
-	passiveIncomePlayers[player] = true
+	scrapyardIncomePlayers[player] = true
 
 	task.spawn(function()
 		while player.Parent do
-			task.wait(CurrencyConfig.PASSIVE_PARTS_INTERVAL_SECONDS)
+			task.wait(CurrencyConfig.SCRAPYARD_INCOME_INTERVAL_SECONDS)
 
 			if not player.Parent or not parts.Parent or not motorPoolLevel.Parent then
 				break
 			end
 
-			parts.Value += getPassiveIncomeAmount(motorPoolLevel)
+			parts.Value += getScrapyardIncomeAmount(motorPoolLevel)
 		end
 
-		passiveIncomePlayers[player] = nil
+		scrapyardIncomePlayers[player] = nil
 	end)
 end
 
@@ -76,7 +76,7 @@ local function setupCurrency(player)
 	motorPoolLevel.Value = STARTING_MOTOR_POOL_LEVEL
 	motorPoolLevel.Parent = leaderstats
 
-	startPassiveIncome(player, parts, motorPoolLevel)
+	startScrapyardIncome(player, parts, motorPoolLevel)
 end
 
 local function requestMotorPoolUpgrade(player)
@@ -95,7 +95,7 @@ end
 
 Players.PlayerAdded:Connect(setupCurrency)
 Players.PlayerRemoving:Connect(function(player)
-	passiveIncomePlayers[player] = nil
+	scrapyardIncomePlayers[player] = nil
 end)
 
 motorPoolUpgradeRemote.OnServerEvent:Connect(requestMotorPoolUpgrade)
