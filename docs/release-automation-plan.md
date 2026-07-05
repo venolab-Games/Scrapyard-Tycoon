@@ -1,27 +1,40 @@
 # Release Automation
 
-This repository now has an automated semantic versioning and GitHub release workflow.
+This repository has an automated GitHub release workflow for early prototype releases.
 
 The active files are:
 
 - `.github/workflows/release.yml`
 - `scripts/generate_release.py`
 
-The workflow creates version tags and GitHub releases from Conventional Commit-style commit titles.
+The project is currently in the alpha phase, so future automated releases use prerelease tags like `v0.0.0-alpha.1`, `v0.0.0-alpha.2`, and `v0.0.0-alpha.3`.
+
+Existing normal tags such as `v0.1.0` and `v0.2.0` can remain as early automation test releases. They do not control the next alpha number.
 
 ## Purpose
 
-The release automation turns commit history into predictable version numbers and clean GitHub release notes.
+The release automation turns commit history into readable GitHub release notes and alpha prerelease tags.
 
 It is designed to:
 
-- Read commits since the latest version tag.
-- Decide the next version using `MAJOR.MINOR.PATCH`.
+- Read commits since the latest alpha tag.
+- Fall back to the latest normal version tag only when no alpha tag exists yet.
+- Create the next `v0.0.0-alpha.N` tag.
+- Mark GitHub releases from alpha tags as prereleases.
 - Group release notes into readable sections.
-- Create tags such as `v0.1.0`, `v0.1.1`, and `v0.2.0`.
-- Create a GitHub release with generated notes.
+- Link short commit hashes to exact GitHub commit pages.
 
 It does not update `CHANGELOG.md` or README version/status sections yet.
+
+## Version Path
+
+Planned release path:
+
+- `v0.0.0-alpha.N`: early prototype iterations.
+- `v0.0.0-beta.N`: later playable beta iterations.
+- `v1.0.0`: real release after beta.
+
+Only alpha prerelease automation is implemented right now.
 
 ## When It Runs
 
@@ -61,38 +74,31 @@ BREAKING CHANGE: Existing saved vehicle inventory data must be migrated.
 
 ## Supported Prefixes
 
-| Prefix | Release-note section | Version impact |
+| Prefix | Release-note section | Alpha release behavior |
 | --- | --- | --- |
-| `feat` | New Features | Minor |
-| `fix` | Bug Fixes | Patch |
-| `docs` | Documentation | No release by default |
-| `refactor` | Refactors | No release by default |
-| `chore` | Chores | No release by default |
-| `build` | Build | No release by default |
-| `test` | Tests | No release by default |
-| Unknown prefixes | Other Changes | No release by default |
+| `feat` | New Features | Creates an alpha release |
+| `fix` | Bug Fixes | Creates an alpha release |
+| `ci` | Other Changes | Creates an alpha release only for material release automation changes |
+| `docs` | Documentation | No release by itself after an alpha tag exists |
+| `refactor` | Refactors | No release by itself after an alpha tag exists |
+| `chore` | Chores | No release by itself after an alpha tag exists |
+| `build` | Build | No release by itself after an alpha tag exists |
+| `test` | Tests | No release by itself after an alpha tag exists |
+| Unknown prefixes | Other Changes | No release by itself after an alpha tag exists |
 
-Any commit can trigger a major release when it includes `!` after the type or scope, or when its description contains `BREAKING CHANGE:`.
+Balance, config, and prototype tuning should usually use `chore:` so those changes do not create releases by themselves.
 
-## Version Bump Rules
+## Alpha Version Rules
 
-The automation chooses the highest required bump from commits since the latest version tag.
+The automation uses alpha prerelease numbering during the prototype phase.
 
-- No previous version tag: create `v0.1.0`.
-- `BREAKING CHANGE:` or `!`: bump major.
-- `feat:`: bump minor.
-- `fix:`: bump patch.
-- Only `docs:`, `chore:`, `refactor:`, `build:`, `test:`, or unknown commits: do not create a new release when a previous version tag exists.
-
-Examples:
-
-| Latest tag | Commits included | Next result |
-| --- | --- | --- |
-| No tag | Any commit history | `v0.1.0` |
-| `v0.1.0` | `fix: repair parts display update` | `v0.1.1` |
-| `v0.1.0` | `feat: add starter vehicle purchase` | `v0.2.0` |
-| `v0.1.0` | `feat!: replace save data format` | `v1.0.0` |
-| `v0.1.0` | `docs: clarify setup steps` | No release |
+- If no alpha tags exist, the next alpha release is `v0.0.0-alpha.1`.
+- If `v0.0.0-alpha.1` exists, the next alpha release is `v0.0.0-alpha.2`.
+- Existing normal tags such as `v0.1.0`, `v0.2.0`, or `v0.3.0` do not make the next alpha release become `v0.3.0`.
+- `feat:` creates a new alpha release.
+- `fix:` creates a new alpha release.
+- `ci:` creates a release only when the title or description indicates material release/version/tag automation work.
+- Only `docs:`, `chore:`, `refactor:`, `build:`, `test:`, or unknown commits do not create a new release when an alpha tag already exists.
 
 ## Release Note Sections
 
@@ -112,17 +118,17 @@ Breaking changes are marked inside their section with `[BREAKING]`.
 Example:
 
 ```markdown
-# v0.2.0
+# v0.0.0-alpha.2
 
-Changes since v0.1.0.
+Changes since v0.0.0-alpha.1.
 
 ## New Features
 
-- Add garage sorting controls (abc1234)
+- Add garage sorting controls ([abc1234](https://github.com/venolab-Games/roblox-vehicle-tycoon/commit/abc1234))
 
 ## Bug Fixes
 
-- Prevent duplicate purchase prompt (def5678)
+- Prevent duplicate purchase prompt ([def5678](https://github.com/venolab-Games/roblox-vehicle-tycoon/commit/def5678))
 ```
 
 ## Manual Trigger
@@ -140,13 +146,13 @@ Manual runs use the same rules as pushes to `main`.
 
 ## Avoiding Accidental Releases
 
-To avoid unintended releases:
+To avoid unintended alpha releases:
 
 - Use `docs:`, `chore:`, `refactor:`, `build:`, or `test:` for changes that should not release by themselves.
-- Do not use `feat:` unless the change should create a minor release.
-- Do not use `fix:` unless the change should create a patch release.
-- Do not add `!` unless the change should create a major release.
-- Do not include `BREAKING CHANGE:` unless the change should create a major release.
+- Use `chore:` for prototype balance/config tuning unless a release is intentionally needed.
+- Do not use `feat:` unless the change should create a new alpha release.
+- Do not use `fix:` unless the change should create a new alpha release.
+- Use `ci:` for release automation changes, but only material release automation changes should trigger a release.
 - Keep release-triggering commits off `main` until they are ready.
 
 The workflow is intentionally limited to `main` and manual runs.
@@ -170,7 +176,8 @@ These are not enabled yet:
 
 - Updating `CHANGELOG.md`.
 - Updating README version or status sections.
-- Publishing prereleases.
+- Adding beta prerelease automation.
+- Promoting to `v1.0.0`.
 - Supporting release branches.
 - Requiring manual approval before tag and release creation.
 

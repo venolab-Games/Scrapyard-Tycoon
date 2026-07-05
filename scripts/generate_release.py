@@ -12,6 +12,7 @@ from pathlib import Path
 
 
 VERSION_TAG_RE = re.compile(r"^v(\d+)\.(\d+)\.(\d+)$")
+ALPHA_TAG_RE = re.compile(r"^v0\.0\.0-alpha\.(\d+)$")
 COMMIT_RE = re.compile(r"^(?P<type>[a-z]+)(?:\([^)]+\))?(?P<breaking>!)?:\s*(?P<summary>.+)$")
 
 SECTION_TITLES = {
@@ -43,6 +44,7 @@ BUMP_LEVELS = {
 }
 
 DEFAULT_GITHUB_REPOSITORY = "venolab-Games/roblox-vehicle-tycoon"
+ALPHA_TAG_PREFIX = "v0.0.0-alpha."
 
 
 @dataclass
@@ -71,8 +73,20 @@ def parse_version_tag(tag: str) -> tuple[int, int, int] | None:
     return tuple(int(part) for part in match.groups())
 
 
+def parse_alpha_tag(tag: str) -> int | None:
+    match = ALPHA_TAG_RE.match(tag)
+    if not match:
+        return None
+
+    return int(match.group(1))
+
+
+def get_tags() -> list[str]:
+    return run_git(["tag", "--list", "v*"]).splitlines()
+
+
 def get_latest_version_tag() -> str | None:
-    tags = run_git(["tag", "--list", "v*"]).splitlines()
+    tags = get_tags()
     version_tags = [(parse_version_tag(tag), tag) for tag in tags]
     valid_tags = [(version, tag) for version, tag in version_tags if version is not None]
 
@@ -83,8 +97,27 @@ def get_latest_version_tag() -> str | None:
     return valid_tags[-1][1]
 
 
-def get_commits(latest_tag: str | None) -> list[Commit]:
-    revision_range = f"{latest_tag}..HEAD" if latest_tag else "HEAD"
+def get_latest_alpha_tag() -> str | None:
+    tags = get_tags()
+    alpha_tags = [(parse_alpha_tag(tag), tag) for tag in tags]
+    valid_tags = [(version, tag) for version, tag in alpha_tags if version is not None]
+
+    if not valid_tags:
+        return None
+
+    valid_tags.sort(key=lambda item: item[0])
+    return valid_tags[-1][1]
+
+
+def get_compare_tag(latest_alpha_tag: str | None) -> str | None:
+    if latest_alpha_tag:
+        return latest_alpha_tag
+
+    return get_latest_version_tag()
+
+
+def get_commits(compare_tag: str | None) -> list[Commit]:
+    revision_range = f"{compare_tag}..HEAD" if compare_tag else "HEAD"
     output = run_git(["log", revision_range, "--pretty=format:%H%x1f%s%x1f%b%x1e"])
 
     commits: list[Commit] = []
@@ -127,6 +160,34 @@ def get_bump_for_commit(commit: Commit) -> str:
     return "none"
 
 
+def is_material_release_ci(commit: Commit, match: re.Match[str] | None) -> bool:
+    if not match or match.group("type") != "ci":
+        return False
+
+    text = f"{commit.subject}\n{commit.body}".lower()
+    release_terms = ["release", "version", "tag", "prerelease", "pre-release"]
+    return any(term in text for term in release_terms)
+
+
+def should_commit_create_alpha_release(commit: Commit) -> bool:
+    match = COMMIT_RE.match(commit.subject)
+    if is_breaking_change(commit, match):
+        return True
+
+    if not match:
+        return False
+
+    commit_type = match.group("type")
+    return commit_type in {"feat", "fix"} or is_material_release_ci(commit, match)
+
+
+def should_create_alpha_release(commits: list[Commit], latest_alpha_tag: str | None) -> bool:
+    if latest_alpha_tag is None:
+        return True
+
+    return any(should_commit_create_alpha_release(commit) for commit in commits)
+
+
 def get_highest_bump(commits: list[Commit]) -> str:
     highest = "none"
 
@@ -138,27 +199,15 @@ def get_highest_bump(commits: list[Commit]) -> str:
     return highest
 
 
-def next_version(latest_tag: str | None, bump: str) -> str:
-    if latest_tag is None:
-        return "v0.1.0"
+def next_alpha_tag(latest_alpha_tag: str | None) -> str:
+    if latest_alpha_tag is None:
+        return f"{ALPHA_TAG_PREFIX}1"
 
-    version = parse_version_tag(latest_tag)
-    if version is None:
-        raise ValueError(f"Invalid version tag: {latest_tag}")
+    alpha_number = parse_alpha_tag(latest_alpha_tag)
+    if alpha_number is None:
+        raise ValueError(f"Invalid alpha tag: {latest_alpha_tag}")
 
-    major, minor, patch = version
-
-    if bump == "major":
-        major += 1
-        minor = 0
-        patch = 0
-    elif bump == "minor":
-        minor += 1
-        patch = 0
-    elif bump == "patch":
-        patch += 1
-
-    return f"v{major}.{minor}.{patch}"
+    return f"{ALPHA_TAG_PREFIX}{alpha_number + 1}"
 
 
 def format_summary(subject: str) -> str:
@@ -188,7 +237,7 @@ def format_commit_link(sha: str) -> str:
     return f"[{short_sha}]({get_commit_url(short_sha)})"
 
 
-def build_release_notes(tag: str, commits: list[Commit], latest_tag: str | None) -> str:
+def build_release_notes(tag: str, commits: list[Commit], compare_tag: str | None) -> str:
     sections = {section: [] for section in SECTION_ORDER}
 
     for commit in commits:
@@ -199,7 +248,7 @@ def build_release_notes(tag: str, commits: list[Commit], latest_tag: str | None)
 
         sections[section_for_commit(commit.subject)].append(f"- {label} ({format_commit_link(commit.sha)})")
 
-    compared_from = latest_tag if latest_tag else "the beginning of the repository"
+    compared_from = compare_tag if compare_tag else "the beginning of the repository"
     lines = [
         f"# {tag}",
         "",
@@ -232,15 +281,16 @@ def main() -> None:
     parser.add_argument("--github-output", default=None)
     args = parser.parse_args()
 
-    latest_tag = get_latest_version_tag()
-    commits = get_commits(latest_tag)
+    latest_alpha_tag = get_latest_alpha_tag()
+    compare_tag = get_compare_tag(latest_alpha_tag)
+    commits = get_commits(compare_tag)
     bump = get_highest_bump(commits)
-    release_needed = latest_tag is None or bump != "none"
-    tag = next_version(latest_tag, bump) if release_needed else latest_tag or ""
+    release_needed = should_create_alpha_release(commits, latest_alpha_tag)
+    tag = next_alpha_tag(latest_alpha_tag) if release_needed else latest_alpha_tag or ""
     notes_path = Path(args.notes_file)
 
     if release_needed:
-        notes_path.write_text(build_release_notes(tag, commits, latest_tag), encoding="utf-8")
+        notes_path.write_text(build_release_notes(tag, commits, compare_tag), encoding="utf-8")
     else:
         notes_path.write_text("No release needed.\n", encoding="utf-8")
 
@@ -248,7 +298,8 @@ def main() -> None:
         "release_needed": "true" if release_needed else "false",
         "tag": tag,
         "bump": bump,
-        "latest_tag": latest_tag or "",
+        "latest_tag": latest_alpha_tag or "",
+        "compare_tag": compare_tag or "",
         "notes_file": str(notes_path),
     }
 
