@@ -6,7 +6,7 @@ local CurrencyConfig = require(ReplicatedStorage.Shared.CurrencyConfig)
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
 local remotesFolder = ReplicatedStorage:WaitForChild(CurrencyConfig.RemotesFolderName)
-local motorPoolUpgradeRemote = remotesFolder:WaitForChild(CurrencyConfig.MotorPoolUpgradeRemoteName)
+local scrapyardUpgradeRemote = remotesFolder:WaitForChild(CurrencyConfig.ScrapyardUpgradeRemoteName)
 
 local screenGui = Instance.new("ScreenGui")
 screenGui.Name = "PartsDisplay"
@@ -18,7 +18,7 @@ local root = Instance.new("Frame")
 root.Name = "Container"
 root.AnchorPoint = Vector2.new(0, 0)
 root.Position = UDim2.fromOffset(16, 16)
-root.Size = UDim2.fromOffset(220, 90)
+root.Size = UDim2.fromOffset(260, 150)
 root.BackgroundTransparency = 1
 root.Parent = screenGui
 
@@ -31,7 +31,7 @@ rootLayout.Parent = root
 
 local partsRow = Instance.new("Frame")
 partsRow.Name = "PartsRow"
-partsRow.Size = UDim2.fromOffset(150, 44)
+partsRow.Size = UDim2.fromOffset(260, 44)
 partsRow.BackgroundColor3 = Color3.fromRGB(24, 28, 34)
 partsRow.BackgroundTransparency = 0.1
 partsRow.BorderSizePixel = 0
@@ -65,19 +65,65 @@ amountLabel.Name = "Amount"
 amountLabel.Size = UDim2.new(1, -36, 1, 0)
 amountLabel.BackgroundTransparency = 1
 amountLabel.Font = Enum.Font.GothamBold
-amountLabel.Text = "0"
+amountLabel.Text = "Parts: 0"
 amountLabel.TextColor3 = Color3.fromRGB(245, 247, 250)
-amountLabel.TextSize = 22
+amountLabel.TextSize = 20
 amountLabel.TextXAlignment = Enum.TextXAlignment.Left
 amountLabel.Parent = partsRow
 
+local infoPanel = Instance.new("Frame")
+infoPanel.Name = "InfoPanel"
+infoPanel.Size = UDim2.fromOffset(260, 52)
+infoPanel.BackgroundColor3 = Color3.fromRGB(24, 28, 34)
+infoPanel.BackgroundTransparency = 0.1
+infoPanel.BorderSizePixel = 0
+infoPanel.Parent = root
+
+local infoCorner = Instance.new("UICorner")
+infoCorner.CornerRadius = UDim.new(0, 8)
+infoCorner.Parent = infoPanel
+
+local infoPadding = Instance.new("UIPadding")
+infoPadding.PaddingLeft = UDim.new(0, 10)
+infoPadding.PaddingRight = UDim.new(0, 10)
+infoPadding.Parent = infoPanel
+
+local infoLayout = Instance.new("UIListLayout")
+infoLayout.FillDirection = Enum.FillDirection.Vertical
+infoLayout.HorizontalAlignment = Enum.HorizontalAlignment.Left
+infoLayout.VerticalAlignment = Enum.VerticalAlignment.Center
+infoLayout.Padding = UDim.new(0, 4)
+infoLayout.Parent = infoPanel
+
+local speedLabel = Instance.new("TextLabel")
+speedLabel.Name = "ScrapyardSpeed"
+speedLabel.Size = UDim2.new(1, 0, 0, 18)
+speedLabel.BackgroundTransparency = 1
+speedLabel.Font = Enum.Font.GothamMedium
+speedLabel.Text = "Scrapyard Speed: +1 / sec"
+speedLabel.TextColor3 = Color3.fromRGB(223, 229, 235)
+speedLabel.TextSize = 15
+speedLabel.TextXAlignment = Enum.TextXAlignment.Left
+speedLabel.Parent = infoPanel
+
+local scrapyardLevelLabel = Instance.new("TextLabel")
+scrapyardLevelLabel.Name = "ScrapyardLevel"
+scrapyardLevelLabel.Size = UDim2.new(1, 0, 0, 18)
+scrapyardLevelLabel.BackgroundTransparency = 1
+scrapyardLevelLabel.Font = Enum.Font.GothamMedium
+scrapyardLevelLabel.Text = "Scrapyard Level: 1"
+scrapyardLevelLabel.TextColor3 = Color3.fromRGB(223, 229, 235)
+scrapyardLevelLabel.TextSize = 15
+scrapyardLevelLabel.TextXAlignment = Enum.TextXAlignment.Left
+scrapyardLevelLabel.Parent = infoPanel
+
 local upgradeButton = Instance.new("TextButton")
-upgradeButton.Name = "UpgradeMotorPoolButton"
-upgradeButton.Size = UDim2.fromOffset(220, 38)
+upgradeButton.Name = "UpgradeScrapyardButton"
+upgradeButton.Size = UDim2.fromOffset(260, 38)
 upgradeButton.BackgroundColor3 = Color3.fromRGB(41, 94, 73)
 upgradeButton.BorderSizePixel = 0
 upgradeButton.Font = Enum.Font.GothamBold
-upgradeButton.Text = string.format("Upgrade Motor Pool - %d Parts", CurrencyConfig.MOTOR_POOL_UPGRADE_COST)
+upgradeButton.Text = "Upgrade Scrapyard - 10 Parts"
 upgradeButton.TextColor3 = Color3.fromRGB(255, 255, 255)
 upgradeButton.TextSize = 15
 upgradeButton.Parent = root
@@ -88,18 +134,39 @@ buttonCorner.Parent = upgradeButton
 
 local function bindPartsValue(parts)
 	local function updateAmount()
-		amountLabel.Text = tostring(parts.Value)
+		amountLabel.Text = string.format("Parts: %d", parts.Value)
 	end
 
 	updateAmount()
 	parts:GetPropertyChangedSignal("Value"):Connect(updateAmount)
 end
 
+local function getScrapyardSpeedAmount(scrapyardLevel)
+	local levelBonus = math.max(scrapyardLevel.Value - 1, 0) * CurrencyConfig.SCRAPYARD_INCOME_BONUS_PER_LEVEL
+	return CurrencyConfig.SCRAPYARD_PARTS_AMOUNT + levelBonus
+end
+
+local function bindScrapyardLevel(scrapyardLevel)
+	local function updateScrapyardInfo()
+		local speedAmount = getScrapyardSpeedAmount(scrapyardLevel)
+		local upgradeCost = CurrencyConfig.GetScrapyardUpgradeCost(scrapyardLevel.Value)
+
+		speedLabel.Text = string.format("Scrapyard Speed: +%d / sec", speedAmount)
+		scrapyardLevelLabel.Text = string.format("Scrapyard Level: %d", scrapyardLevel.Value)
+		upgradeButton.Text = string.format("Upgrade Scrapyard - %d Parts", upgradeCost)
+	end
+
+	updateScrapyardInfo()
+	scrapyardLevel:GetPropertyChangedSignal("Value"):Connect(updateScrapyardInfo)
+end
+
 local leaderstats = player:WaitForChild("leaderstats")
 local parts = leaderstats:WaitForChild(CurrencyConfig.PartsName)
+local scrapyardLevel = player:WaitForChild(CurrencyConfig.ScrapyardLevelName)
 
 bindPartsValue(parts)
+bindScrapyardLevel(scrapyardLevel)
 
 upgradeButton.Activated:Connect(function()
-	motorPoolUpgradeRemote:FireServer()
+	scrapyardUpgradeRemote:FireServer()
 end)
