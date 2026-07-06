@@ -77,8 +77,8 @@ BREAKING CHANGE: Existing saved vehicle inventory data must be migrated.
 | Prefix | Release-note section | Alpha release behavior |
 | --- | --- | --- |
 | `feat` | New Features | Creates an alpha release |
-| `fix` | Bug Fixes | Creates an alpha release |
-| `ci` | Other Changes | Creates an alpha release only for material release automation changes |
+| `fix` | Fixes | Creates an alpha release |
+| `ci` | CI / Automation | Creates an alpha release only for material release automation changes |
 | `docs` | Documentation | No release by itself after an alpha tag exists |
 | `refactor` | Refactors | No release by itself after an alpha tag exists |
 | `chore` | Chores | No release by itself after an alpha tag exists |
@@ -105,8 +105,9 @@ The automation uses alpha prerelease numbering during the prototype phase.
 Generated GitHub release notes can include:
 
 - New Features
-- Bug Fixes
+- Fixes
 - Documentation
+- CI / Automation
 - Refactors
 - Chores
 - Build
@@ -118,15 +119,13 @@ Breaking changes are marked inside their section with `[BREAKING]`.
 Example:
 
 ```markdown
-# v0.0.0-alpha.2
-
 Changes since v0.0.0-alpha.1.
 
 ## New Features
 
 - Add garage sorting controls ([abc1234](https://github.com/venolab-Games/roblox-vehicle-tycoon/commit/abc1234))
 
-## Bug Fixes
+## Fixes
 
 - Prevent duplicate purchase prompt ([def5678](https://github.com/venolab-Games/roblox-vehicle-tycoon/commit/def5678))
 ```

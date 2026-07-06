@@ -17,8 +17,9 @@ COMMIT_RE = re.compile(r"^(?P<type>[a-z]+)(?:\([^)]+\))?(?P<breaking>!)?:\s*(?P<
 
 SECTION_TITLES = {
     "feat": "New Features",
-    "fix": "Bug Fixes",
+    "fix": "Fixes",
     "docs": "Documentation",
+    "ci": "CI / Automation",
     "refactor": "Refactors",
     "chore": "Chores",
     "build": "Build",
@@ -27,8 +28,9 @@ SECTION_TITLES = {
 
 SECTION_ORDER = [
     "New Features",
-    "Bug Fixes",
+    "Fixes",
     "Documentation",
+    "CI / Automation",
     "Refactors",
     "Chores",
     "Build",
@@ -213,7 +215,7 @@ def next_alpha_tag(latest_alpha_tag: str | None) -> str:
 def format_summary(subject: str) -> str:
     match = COMMIT_RE.match(subject)
     if not match:
-        return subject
+        return subject[:1].upper() + subject[1:]
 
     summary = match.group("summary").strip()
     return summary[:1].upper() + summary[1:]
@@ -250,8 +252,6 @@ def build_release_notes(tag: str, commits: list[Commit], compare_tag: str | None
 
     compared_from = compare_tag if compare_tag else "the beginning of the repository"
     lines = [
-        f"# {tag}",
-        "",
         f"Changes since {compared_from}.",
         "",
     ]
