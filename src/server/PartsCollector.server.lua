@@ -1,6 +1,7 @@
 local CollectionService = game:GetService("CollectionService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local TweenService = game:GetService("TweenService")
 local Workspace = game:GetService("Workspace")
 
 local CurrencyConfig = require(ReplicatedStorage.Shared.CurrencyConfig)
@@ -9,6 +10,8 @@ local DEBUG_PREFIX = "[PartsCollector]"
 local BROKEN_CAR_GENERATE_INTERVAL_SECONDS = 1
 local MAX_STORED_PARTS = 999999
 local COLLECT_DEBOUNCE_SECONDS = 0.75
+local COLLECT_FLASH_SECONDS = 0.18
+local COLLECT_POPUP_SECONDS = 0.8
 local BROKEN_CAR_NAMES = { "BrokenCar_01", "BrokenCar_02", "BrokenCar_03" }
 
 local collectDebounces = {}
@@ -177,6 +180,78 @@ local function updateCounterValue(collector)
 	end
 end
 
+local function showCollectPopup(collectPad, amount)
+	local billboard = Instance.new("BillboardGui")
+	billboard.Name = "CollectPartsFeedback"
+	billboard.AlwaysOnTop = true
+	billboard.Size = UDim2.fromOffset(160, 48)
+	billboard.StudsOffsetWorldSpace = Vector3.new(0, math.max(collectPad.Size.Y * 0.5 + 2, 2.5), 0)
+	billboard.Adornee = collectPad
+	billboard.Parent = collectPad
+
+	local label = Instance.new("TextLabel")
+	label.BackgroundTransparency = 1
+	label.Font = Enum.Font.GothamBold
+	label.Size = UDim2.fromScale(1, 1)
+	label.Text = string.format("+%d Parts", amount)
+	label.TextColor3 = Color3.fromRGB(255, 239, 156)
+	label.TextScaled = true
+	label.TextStrokeTransparency = 0.25
+	label.Parent = billboard
+
+	local targetOffset = billboard.StudsOffsetWorldSpace + Vector3.new(0, 1.5, 0)
+	local moveTween = TweenService:Create(billboard, TweenInfo.new(COLLECT_POPUP_SECONDS, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+		StudsOffsetWorldSpace = targetOffset,
+	})
+	local fadeTween = TweenService:Create(label, TweenInfo.new(COLLECT_POPUP_SECONDS, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+		TextTransparency = 1,
+		TextStrokeTransparency = 1,
+	})
+
+	moveTween:Play()
+	fadeTween:Play()
+	fadeTween.Completed:Once(function()
+		billboard:Destroy()
+	end)
+end
+
+local function flashCollectPad(collectPad)
+	if collectPad:GetAttribute("CollectFeedbackActive") then
+		return
+	end
+
+	collectPad:SetAttribute("CollectFeedbackActive", true)
+	local originalColor = collectPad.Color
+	local originalMaterial = collectPad.Material
+	collectPad.Material = Enum.Material.Neon
+
+	local flashTween = TweenService:Create(collectPad, TweenInfo.new(COLLECT_FLASH_SECONDS, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+		Color = Color3.fromRGB(255, 239, 156),
+	})
+	local restoreTween = TweenService:Create(collectPad, TweenInfo.new(COLLECT_FLASH_SECONDS, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
+		Color = originalColor,
+	})
+
+	flashTween:Play()
+	flashTween.Completed:Once(function()
+		if collectPad.Parent then
+			restoreTween:Play()
+		end
+	end)
+	restoreTween.Completed:Once(function()
+		if collectPad.Parent then
+			collectPad.Color = originalColor
+			collectPad.Material = originalMaterial
+			collectPad:SetAttribute("CollectFeedbackActive", false)
+		end
+	end)
+end
+
+local function showCollectFeedback(collectPad, amount)
+	showCollectPopup(collectPad, amount)
+	flashCollectPad(collectPad)
+end
+
 local function getBrokenCarsFolder()
 	local scrapyard = Workspace:FindFirstChild("Scrapyard")
 	local unlockObjects = scrapyard and scrapyard:FindFirstChild("UnlockObjects")
@@ -263,18 +338,19 @@ end
 local function collectStoredParts(player, collector)
 	local parts = getParts(player)
 	if not parts then
-		return
+		return 0
 	end
 
 	local storedParts = getStoredParts(collector)
 	if storedParts <= 0 then
 		log(string.format("%s attempted collect from %s while empty", player.Name, collector.Name))
-		return
+		return 0
 	end
 
 	parts.Value += storedParts
 	setStoredParts(collector, 0)
 	log(string.format("%s collected %d Parts from %s", player.Name, storedParts, collector.Name))
+	return storedParts
 end
 
 local function connectCollectPad(collector, collectPad)
@@ -296,7 +372,10 @@ local function connectCollectPad(collector, collectPad)
 		end
 		collectDebounces[debounceKey] = now
 
-		collectStoredParts(player, collector)
+		local collectedAmount = collectStoredParts(player, collector)
+		if collectedAmount > 0 then
+			showCollectFeedback(collectPad, collectedAmount)
+		end
 	end)
 end
 
