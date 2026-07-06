@@ -27,8 +27,17 @@ local buildSteps = {
 		buttonName = "BuildButton_UnlockScrapyard",
 		buttonFolder = "BuildButtons",
 		cost = 10,
-		revealObjects = { "ScrapyardGround", "Fence" },
-		revealButtons = { "BuildButton_BrokenCar_01" },
+		revealObjects = { "Fence" },
+		revealButtons = { "BuildButton_BrokenCar_01", "BuildButton_Workbench" },
+	},
+	{
+		buttonName = "BuildButton_Workbench",
+		buttonFolder = "HiddenButtons",
+		displayName = "Workbench",
+		cost = 50,
+		clearProductionAttributes = true,
+		revealObjects = { "Workbench" },
+		revealButtons = {},
 	},
 	{
 		buttonName = "BuildButton_BrokenCar_01",
@@ -91,7 +100,6 @@ logFound("Scrapyard", scrapyard, "Workspace > Scrapyard")
 logFound("BuildButtons", buildButtons, "Workspace > Scrapyard > BuildButtons")
 logFound("HiddenButtons", hiddenButtons, "Workspace > Scrapyard > HiddenButtons")
 logFound("UnlockObjects", unlockObjects, "Workspace > Scrapyard > UnlockObjects")
-logFound("ScrapyardGround", unlockObjects and unlockObjects:FindFirstChild("ScrapyardGround"), "Workspace > Scrapyard > UnlockObjects > ScrapyardGround")
 logFound("Fence", unlockObjects and unlockObjects:FindFirstChild("Fence"), "Workspace > Scrapyard > UnlockObjects > Fence")
 logFound("Fence > Beams", unlockObjects and unlockObjects:FindFirstChild("Fence") and unlockObjects.Fence:FindFirstChild("Beams"), "Workspace > Scrapyard > UnlockObjects > Fence > Beams")
 logFound("Fence > Posts", unlockObjects and unlockObjects:FindFirstChild("Fence") and unlockObjects.Fence:FindFirstChild("Posts"), "Workspace > Scrapyard > UnlockObjects > Fence > Posts")
@@ -179,7 +187,7 @@ local function getBuildButton(buttonName, buttonFolder)
 end
 
 local function getRevealObject(objectName)
-	if objectName == "ScrapyardGround" or objectName == "Fence" then
+	if objectName == "Fence" then
 		return unlockObjects and unlockObjects:FindFirstChild(objectName)
 	end
 
@@ -820,7 +828,7 @@ local function revealObject(objectName)
 
 	local object = getRevealObject(objectName)
 	if not object then
-		if objectName == "ScrapyardGround" or objectName == "Fence" then
+		if objectName == "Fence" then
 			warnMissing(string.format("Workspace > Scrapyard > UnlockObjects > %s", objectName))
 		elseif objectName:match("^BrokenCar_") then
 			warnMissing(string.format("Workspace > Scrapyard > UnlockObjects > BrokenCars > %s", objectName))
@@ -838,7 +846,7 @@ local function revealObject(objectName)
 		debugLog(string.format("%s marked CollectorActive for Parts collector income", objectName))
 	end
 
-	if objectName == "ScrapyardGround" or objectName == "Fence" then
+	if objectName == "Fence" then
 		logVisibilitySample(objectName, object)
 	end
 end
@@ -939,6 +947,13 @@ local function setupBuildButton(step)
 	buttonsByName[step.buttonName] = button
 	if button:GetAttribute("BuildCost") == nil then
 		button:SetAttribute("BuildCost", step.cost)
+	end
+	if step.displayName and button:GetAttribute("DisplayName") == nil then
+		button:SetAttribute("DisplayName", step.displayName)
+	end
+	if step.clearProductionAttributes then
+		button:SetAttribute("ProducesPartsPerSecond", nil)
+		button:SetAttribute("PartsPerSecond", nil)
 	end
 	if step.producesPartsPerSecond and button:GetAttribute("ProducesPartsPerSecond") == nil and button:GetAttribute("PartsPerSecond") == nil then
 		button:SetAttribute("ProducesPartsPerSecond", step.producesPartsPerSecond)
@@ -1128,10 +1143,12 @@ end
 local function hideInitialObject(objectName)
 	local object = getRevealObject(objectName)
 	if not object then
-		if objectName == "ScrapyardGround" or objectName == "Fence" then
+		if objectName == "Fence" then
 			warnMissing(string.format("Workspace > Scrapyard > UnlockObjects > %s", objectName))
-		else
+		elseif objectName:match("^BrokenCar_") then
 			warnMissing(string.format("Workspace > Scrapyard > UnlockObjects > BrokenCars > %s", objectName))
+		else
+			warnMissing(string.format("Workspace > Scrapyard > UnlockObjects > %s", objectName))
 		end
 		return
 	end
@@ -1178,11 +1195,11 @@ local function setupBuildButtons()
 end
 
 local function hideInitialScrapyardObjects()
-	hideInitialObject("ScrapyardGround")
 	hideInitialObject("Fence")
 	hideInitialObject("BrokenCar_01")
 	hideInitialObject("BrokenCar_02")
 	hideInitialObject("BrokenCar_03")
+	hideInitialObject("Workbench")
 end
 
 local function watchPlayerParts(player)
