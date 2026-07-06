@@ -16,6 +16,12 @@ local BUTTON_COLORS = {
 	Purchased = Color3.fromRGB(80, 80, 80),
 }
 
+local BUTTON_LABEL_NAME = "BuildButtonLabel"
+local BUTTON_LABEL_SIGN_NAME = "BuildButtonLabelSign"
+local BUTTON_LABEL_SIGN_TAG = "BuildButtonLabelSign"
+local LEGACY_BUTTON_LABEL_ANCHOR_NAME = "BuildButtonLabelAnchor"
+local buttonLabelConnections = {}
+
 local buildSteps = {
 	{
 		buttonName = "BuildButton_UnlockScrapyard",
@@ -28,6 +34,7 @@ local buildSteps = {
 		buttonName = "BuildButton_BrokenCar_01",
 		buttonFolder = "HiddenButtons",
 		cost = 15,
+		producesPartsPerSecond = 1,
 		revealObjects = { "BrokenCar_01" },
 		revealButtons = { "BuildButton_BrokenCar_02" },
 	},
@@ -35,6 +42,7 @@ local buildSteps = {
 		buttonName = "BuildButton_BrokenCar_02",
 		buttonFolder = "HiddenButtons",
 		cost = 23,
+		producesPartsPerSecond = 1,
 		revealObjects = { "BrokenCar_02" },
 		revealButtons = { "BuildButton_BrokenCar_03" },
 	},
@@ -42,6 +50,7 @@ local buildSteps = {
 		buttonName = "BuildButton_BrokenCar_03",
 		buttonFolder = "HiddenButtons",
 		cost = 34,
+		producesPartsPerSecond = 1,
 		revealObjects = { "BrokenCar_03" },
 		revealButtons = {},
 	},
@@ -221,6 +230,16 @@ local function setObjectHidden(object, hidden, options)
 		rememberOriginalState(instance)
 
 		if instance:IsA("BasePart") then
+			if instance.Name == BUTTON_LABEL_SIGN_NAME or instance.Name == LEGACY_BUTTON_LABEL_ANCHOR_NAME then
+				instance.Anchored = true
+				instance.CanCollide = false
+				instance.CanTouch = false
+				instance.CanQuery = false
+				instance.Transparency = 1
+				instance.LocalTransparencyModifier = 1
+				return
+			end
+
 			if hidden then
 				instance.Transparency = 1
 				instance.LocalTransparencyModifier = 1
@@ -261,13 +280,458 @@ local function getTouchPart(button)
 	return button:FindFirstChildWhichIsA("BasePart", true)
 end
 
+local function getButtonPart(button)
+	local buttonPart = findDescendantByName(button, "ButtonPart")
+	if buttonPart and buttonPart:IsA("BasePart") then
+		return buttonPart
+	end
+
+	return nil
+end
+
+local function configureButtonLabelSign(sign)
+	sign.Name = BUTTON_LABEL_SIGN_NAME
+	sign.Anchored = true
+	sign.CanCollide = false
+	sign.CanTouch = false
+	sign.CanQuery = false
+	sign.CastShadow = false
+	sign.Color = Color3.fromRGB(23, 28, 34)
+	sign.Locked = true
+	sign.Material = Enum.Material.SmoothPlastic
+	sign.Size = Vector3.new(4.05, 1.45, 0.08)
+	sign.Transparency = 0.25
+	sign.LocalTransparencyModifier = 0
+
+	if not CollectionService:HasTag(sign, BUTTON_LABEL_SIGN_TAG) then
+		CollectionService:AddTag(sign, BUTTON_LABEL_SIGN_TAG)
+	end
+end
+
+local function getLabelLookTarget(position)
+	local spawnLocation = Workspace:FindFirstChildWhichIsA("SpawnLocation", true)
+	local targetPosition = spawnLocation and spawnLocation.Position or Vector3.zero
+	targetPosition = Vector3.new(targetPosition.X, position.Y, targetPosition.Z)
+
+	if (targetPosition - position).Magnitude < 0.1 then
+		targetPosition = position + Vector3.new(0, 0, -1)
+	end
+
+	return targetPosition
+end
+
+local function cleanupLegacyButtonLabels(button)
+	for _, descendant in button:GetDescendants() do
+		if descendant.Name == BUTTON_LABEL_NAME and (descendant:IsA("BillboardGui") or descendant:IsA("SurfaceGui")) then
+			descendant:Destroy()
+		elseif descendant.Name == LEGACY_BUTTON_LABEL_ANCHOR_NAME then
+			descendant:Destroy()
+		end
+	end
+end
+
+local function updateButtonLabelSign(button)
+	local sign = button:FindFirstChild(BUTTON_LABEL_SIGN_NAME)
+	if not sign or not sign:IsA("BasePart") then
+		if sign then
+			sign:Destroy()
+		end
+
+		sign = Instance.new("Part")
+	end
+
+	configureButtonLabelSign(sign)
+
+	if sign.Parent == button then
+		sign.Parent = nil
+	end
+
+	local boundingCFrame, boundingSize = button:GetBoundingBox()
+	local boundingCenter = boundingCFrame.Position
+	local signPosition = Vector3.new(
+		boundingCenter.X,
+		boundingCenter.Y + (boundingSize.Y / 2) + 2.25,
+		boundingCenter.Z
+	)
+
+	sign.CFrame = CFrame.lookAt(signPosition, getLabelLookTarget(signPosition))
+	sign.Parent = button
+
+	return sign
+end
+
+local function disconnectButtonLabel(button)
+	local connections = buttonLabelConnections[button]
+	if not connections then
+		return
+	end
+
+	for _, connection in connections do
+		connection:Disconnect()
+	end
+	buttonLabelConnections[button] = nil
+end
+
+local function prettifyButtonName(buttonName)
+	local displayName = buttonName:gsub("^BuildButton_", ""):gsub("_", " ")
+	displayName = displayName:gsub("(%a)(%w*)", function(first, rest)
+		return first:upper() .. rest:lower()
+	end)
+
+	return displayName
+end
+
+local function getButtonDisplayName(button)
+	local displayName = button:GetAttribute("DisplayName")
+	if typeof(displayName) == "string" and displayName ~= "" then
+		return displayName
+	end
+
+	return prettifyButtonName(button.Name)
+end
+
+local function getButtonBuildCost(button)
+	local attributeCost = button:GetAttribute("BuildCost")
+	if typeof(attributeCost) == "number" then
+		return attributeCost
+	end
+
+	local buildCostValue = button:FindFirstChild("BuildCost")
+	if buildCostValue and buildCostValue:IsA("ValueBase") then
+		return buildCostValue.Value
+	end
+
+	return nil
+end
+
+local function getButtonPartsPerSecond(button)
+	local partsPerSecond = button:GetAttribute("ProducesPartsPerSecond")
+	if typeof(partsPerSecond) == "number" then
+		return partsPerSecond
+	end
+
+	partsPerSecond = button:GetAttribute("PartsPerSecond")
+	if typeof(partsPerSecond) == "number" then
+		return partsPerSecond
+	end
+
+	return 0
+end
+
+local function formatButtonBuildCost(cost)
+	if typeof(cost) ~= "number" then
+		return "Cost: ? Parts"
+	end
+
+	if cost % 1 == 0 then
+		return string.format("Cost: %d Parts", cost)
+	end
+
+	return string.format("Cost: %.2f Parts", cost)
+end
+
+local function findButtonLabelText(labelGui, textName)
+	local textLabel = labelGui:FindFirstChild(textName, true)
+	return textLabel and textLabel:IsA("TextLabel") and textLabel or nil
+end
+
+local function getButtonLabelGuis(button)
+	local sign = button:FindFirstChild(BUTTON_LABEL_SIGN_NAME)
+	if not sign then
+		return {}
+	end
+
+	local labels = {}
+	for _, child in sign:GetChildren() do
+		if child.Name == BUTTON_LABEL_NAME and child:IsA("SurfaceGui") then
+			table.insert(labels, child)
+		end
+	end
+
+	return labels
+end
+
+local function isButtonPartVisibleAndInteractable(touchPart)
+	return touchPart:IsDescendantOf(Workspace)
+		and touchPart.Transparency < 1
+		and touchPart.LocalTransparencyModifier < 1
+		and touchPart.CanTouch
+		and touchPart.CanQuery
+end
+
+local function updateButtonLabelVisibility(button)
+	local touchPart = getButtonPart(button)
+	if button:IsA("Model") then
+		updateButtonLabelSign(button)
+	end
+
+	local labelGuis = getButtonLabelGuis(button)
+	if not touchPart or #labelGuis == 0 then
+		return
+	end
+
+	local isVisible = isButtonPartVisibleAndInteractable(touchPart)
+	local sign = button:FindFirstChild(BUTTON_LABEL_SIGN_NAME)
+	if sign and sign:IsA("BasePart") then
+		sign.Transparency = isVisible and 0.25 or 1
+		sign.LocalTransparencyModifier = isVisible and 0 or 1
+	end
+
+	for _, labelGui in labelGuis do
+		labelGui.Enabled = isVisible
+	end
+end
+
+local function updateButtonLabelText(button)
+	local labelGuis = getButtonLabelGuis(button)
+	if #labelGuis == 0 then
+		return
+	end
+
+	for _, labelGui in labelGuis do
+		local title = findButtonLabelText(labelGui, "BuildName")
+		if title then
+			title.Text = getButtonDisplayName(button)
+		end
+
+		local production = findButtonLabelText(labelGui, "Production")
+		if production then
+			local partsPerSecond = getButtonPartsPerSecond(button)
+			production.Visible = partsPerSecond > 0
+			if partsPerSecond > 0 then
+				if partsPerSecond % 1 == 0 then
+					production.Text = string.format("Produces: +%d Part/sec", partsPerSecond)
+				else
+					production.Text = string.format("Produces: +%.2f Part/sec", partsPerSecond)
+				end
+			end
+		end
+
+		local cost = findButtonLabelText(labelGui, "BuildCost")
+		if cost then
+			cost.Text = formatButtonBuildCost(getButtonBuildCost(button))
+		end
+	end
+
+	updateButtonLabelVisibility(button)
+end
+
+local function createButtonLabelSurface(sign, face)
+	local surfaceGui = Instance.new("SurfaceGui")
+	surfaceGui.Name = BUTTON_LABEL_NAME
+	surfaceGui.Adornee = sign
+	surfaceGui.AlwaysOnTop = false
+	surfaceGui.Face = face
+	surfaceGui.LightInfluence = 0
+	surfaceGui.PixelsPerStud = 80
+	surfaceGui.SizingMode = Enum.SurfaceGuiSizingMode.PixelsPerStud
+	surfaceGui.Parent = sign
+
+	local panel = Instance.new("Frame")
+	panel.Name = "Panel"
+	panel.BackgroundColor3 = Color3.fromRGB(23, 28, 34)
+	panel.BackgroundTransparency = 0.12
+	panel.BorderSizePixel = 0
+	panel.Size = UDim2.fromScale(1, 1)
+	panel.Parent = surfaceGui
+
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = UDim.new(0, 8)
+	corner.Parent = panel
+
+	local stroke = Instance.new("UIStroke")
+	stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+	stroke.Color = Color3.fromRGB(255, 224, 120)
+	stroke.Thickness = 3
+	stroke.Transparency = 0.15
+	stroke.Parent = panel
+
+	local padding = Instance.new("UIPadding")
+	padding.PaddingBottom = UDim.new(0, 10)
+	padding.PaddingLeft = UDim.new(0, 12)
+	padding.PaddingRight = UDim.new(0, 12)
+	padding.PaddingTop = UDim.new(0, 10)
+	padding.Parent = panel
+
+	local layout = Instance.new("UIListLayout")
+	layout.FillDirection = Enum.FillDirection.Vertical
+	layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+	layout.Padding = UDim.new(0, 4)
+	layout.SortOrder = Enum.SortOrder.LayoutOrder
+	layout.VerticalAlignment = Enum.VerticalAlignment.Center
+	layout.Parent = panel
+
+	local title = Instance.new("TextLabel")
+	title.Name = "BuildName"
+	title.BackgroundTransparency = 1
+	title.Font = Enum.Font.GothamBlack
+	title.LayoutOrder = 1
+	title.Size = UDim2.new(1, 0, 0, 44)
+	title.TextColor3 = Color3.fromRGB(255, 255, 255)
+	title.TextScaled = true
+	title.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+	title.TextStrokeTransparency = 0.25
+	title.TextWrapped = true
+	title.Parent = panel
+
+	local titleSize = Instance.new("UITextSizeConstraint")
+	titleSize.MaxTextSize = 34
+	titleSize.MinTextSize = 14
+	titleSize.Parent = title
+
+	local production = Instance.new("TextLabel")
+	production.Name = "Production"
+	production.BackgroundTransparency = 1
+	production.Font = Enum.Font.GothamBold
+	production.LayoutOrder = 2
+	production.Size = UDim2.new(1, 0, 0, 26)
+	production.TextColor3 = Color3.fromRGB(190, 255, 150)
+	production.TextScaled = true
+	production.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+	production.TextStrokeTransparency = 0.4
+	production.TextWrapped = true
+	production.Visible = false
+	production.Parent = panel
+
+	local productionSize = Instance.new("UITextSizeConstraint")
+	productionSize.MaxTextSize = 20
+	productionSize.MinTextSize = 10
+	productionSize.Parent = production
+
+	local cost = Instance.new("TextLabel")
+	cost.Name = "BuildCost"
+	cost.BackgroundTransparency = 1
+	cost.Font = Enum.Font.GothamBold
+	cost.LayoutOrder = 3
+	cost.Size = UDim2.new(1, 0, 0, 28)
+	cost.TextColor3 = Color3.fromRGB(255, 230, 126)
+	cost.TextScaled = true
+	cost.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+	cost.TextStrokeTransparency = 0.35
+	cost.TextWrapped = true
+	cost.Parent = panel
+
+	local costSize = Instance.new("UITextSizeConstraint")
+	costSize.MaxTextSize = 24
+	costSize.MinTextSize = 12
+	costSize.Parent = cost
+
+	return surfaceGui
+end
+
+local function createButtonLabel(button)
+	cleanupLegacyButtonLabels(button)
+	local sign = updateButtonLabelSign(button)
+
+	for _, child in sign:GetChildren() do
+		if child.Name == BUTTON_LABEL_NAME and (child:IsA("BillboardGui") or child:IsA("SurfaceGui")) then
+			child:Destroy()
+		end
+	end
+
+	createButtonLabelSurface(sign, Enum.NormalId.Front)
+	createButtonLabelSurface(sign, Enum.NormalId.Back)
+
+	updateButtonLabelText(button)
+end
+
+local function setupButtonLabel(button)
+	if not button:IsA("Model") or not CollectionService:HasTag(button, "Button") then
+		return
+	end
+
+	local touchPart = getButtonPart(button)
+	if not touchPart then
+		warn(string.format("%s Tagged Button model has no ButtonPart for label: %s", DEBUG_PREFIX, button:GetFullName()))
+		return
+	end
+
+	disconnectButtonLabel(button)
+	createButtonLabel(button)
+
+	local connections = {
+		button:GetAttributeChangedSignal("DisplayName"):Connect(function()
+			updateButtonLabelText(button)
+		end),
+		button:GetAttributeChangedSignal("BuildCost"):Connect(function()
+			updateButtonLabelText(button)
+		end),
+		button:GetAttributeChangedSignal("ProducesPartsPerSecond"):Connect(function()
+			updateButtonLabelText(button)
+		end),
+		button:GetAttributeChangedSignal("PartsPerSecond"):Connect(function()
+			updateButtonLabelText(button)
+		end),
+		touchPart:GetPropertyChangedSignal("Transparency"):Connect(function()
+			updateButtonLabelVisibility(button)
+		end),
+		touchPart:GetPropertyChangedSignal("LocalTransparencyModifier"):Connect(function()
+			updateButtonLabelVisibility(button)
+		end),
+		touchPart:GetPropertyChangedSignal("CanTouch"):Connect(function()
+			updateButtonLabelVisibility(button)
+		end),
+		touchPart:GetPropertyChangedSignal("CanQuery"):Connect(function()
+			updateButtonLabelVisibility(button)
+		end),
+		touchPart:GetPropertyChangedSignal("CFrame"):Connect(function()
+			updateButtonLabelVisibility(button)
+		end),
+		touchPart:GetPropertyChangedSignal("Size"):Connect(function()
+			updateButtonLabelSign(button)
+			updateButtonLabelVisibility(button)
+		end),
+		button.AncestryChanged:Connect(function(_, parent)
+			if not parent then
+				disconnectButtonLabel(button)
+			else
+				updateButtonLabelSign(button)
+				updateButtonLabelVisibility(button)
+			end
+		end),
+		button.ChildAdded:Connect(function(child)
+			if child.Name == "BuildCost" and child:IsA("ValueBase") then
+				setupButtonLabel(button)
+			end
+		end),
+		button.ChildRemoved:Connect(function(child)
+			if child.Name == "BuildCost" then
+				updateButtonLabelText(button)
+			end
+		end),
+	}
+
+	local buildCostValue = button:FindFirstChild("BuildCost")
+	if buildCostValue and buildCostValue:IsA("ValueBase") then
+		table.insert(connections, buildCostValue:GetPropertyChangedSignal("Value"):Connect(function()
+			updateButtonLabelText(button)
+		end))
+	end
+
+	buttonLabelConnections[button] = connections
+end
+
+local function setupTaggedButtonLabels()
+	for _, button in CollectionService:GetTagged("Button") do
+		setupButtonLabel(button)
+	end
+
+	CollectionService:GetInstanceAddedSignal("Button"):Connect(function(button)
+		task.defer(setupButtonLabel, button)
+	end)
+
+	CollectionService:GetInstanceRemovedSignal("Button"):Connect(function(button)
+		disconnectButtonLabel(button)
+	end)
+end
+
 local function setButtonColor(button, color)
 	if not button then
 		return
 	end
 
 	eachSelfAndDescendant(button, function(instance)
-		if instance:IsA("BasePart") then
+		if instance:IsA("BasePart") and instance.Name ~= BUTTON_LABEL_SIGN_NAME then
 			instance.Color = color
 			instance.Material = Enum.Material.Neon
 		end
@@ -389,6 +853,7 @@ local function revealButton(buttonName)
 	local processed = setObjectHidden(button, false)
 	disableButtonPrompts(button)
 	unlockedButtons[buttonName] = true
+	updateButtonLabelVisibility(button)
 	debugLog(string.format("revealed button %s; processed %d descendants", buttonName, processed))
 end
 
@@ -399,6 +864,7 @@ local function hidePurchasedButton(button, buttonName)
 	disableButtonPrompts(button)
 	setButtonColor(button, BUTTON_COLORS.Purchased)
 	setObjectHidden(button, true)
+	updateButtonLabelVisibility(button)
 end
 
 local function purchaseBuildStep(player, step)
@@ -474,6 +940,10 @@ local function setupBuildButton(step)
 	if button:GetAttribute("BuildCost") == nil then
 		button:SetAttribute("BuildCost", step.cost)
 	end
+	if step.producesPartsPerSecond and button:GetAttribute("ProducesPartsPerSecond") == nil and button:GetAttribute("PartsPerSecond") == nil then
+		button:SetAttribute("ProducesPartsPerSecond", step.producesPartsPerSecond)
+	end
+	updateButtonLabelText(button)
 	debugLog(string.format("found build button %s: %s", step.buttonName, button:GetFullName()))
 	debugLog(string.format("BuildCost for %s: %s", step.buttonName, tostring(button:GetAttribute("BuildCost"))))
 
@@ -683,6 +1153,7 @@ local function hideInitialButton(buttonName)
 	local processed = setObjectHidden(button, true)
 	disableButtonPrompts(button)
 	unlockedButtons[buttonName] = false
+	updateButtonLabelVisibility(button)
 	debugLog(string.format("initial hide processed %d descendants for %s", processed, buttonName))
 end
 
@@ -702,6 +1173,7 @@ local function setupBuildButtons()
 		setObjectHidden(firstButton, false)
 		disableButtonPrompts(firstButton)
 		unlockedButtons.BuildButton_UnlockScrapyard = true
+		updateButtonLabelVisibility(firstButton)
 	end
 end
 
@@ -726,6 +1198,7 @@ local function watchPlayerParts(player)
 end
 
 scanTaggedButtons()
+setupTaggedButtonLabels()
 hideInitialScrapyardObjects()
 setupBuildButtons()
 setupCarPileClick()
