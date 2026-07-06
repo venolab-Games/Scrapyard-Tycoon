@@ -369,6 +369,11 @@ local function revealObject(objectName)
 	local processed = setObjectHidden(object, false)
 	debugLog(string.format("reveal processed %d descendants for %s", processed, objectName))
 
+	if objectName:match("^BrokenCar_") then
+		object:SetAttribute("CollectorActive", true)
+		debugLog(string.format("%s marked CollectorActive for Parts collector income", objectName))
+	end
+
 	if objectName == "ScrapyardGround" or objectName == "Fence" then
 		logVisibilitySample(objectName, object)
 	end
@@ -662,6 +667,9 @@ local function hideInitialObject(objectName)
 	end
 
 	local processed = setObjectHidden(object, true)
+	if objectName:match("^BrokenCar_") then
+		object:SetAttribute("CollectorActive", false)
+	end
 	debugLog(string.format("initial hide processed %d descendants for %s", processed, objectName))
 end
 
