@@ -10,10 +10,14 @@ local function setupCurrency(player)
 	leaderstats.Name = "leaderstats"
 	leaderstats.Parent = player
 
-	local parts = Instance.new("IntValue")
+	local parts = Instance.new("NumberValue")
 	parts.Name = CurrencyConfig.PartsName
 	parts.Value = STARTING_PARTS
 	parts.Parent = leaderstats
+
+	if player:GetAttribute(CurrencyConfig.PartsIncomeRateAttribute) == nil then
+		player:SetAttribute(CurrencyConfig.PartsIncomeRateAttribute, 0)
+	end
 end
 
 Players.PlayerAdded:Connect(setupCurrency)

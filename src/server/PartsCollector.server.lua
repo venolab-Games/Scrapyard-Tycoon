@@ -8,6 +8,7 @@ local CurrencyConfig = require(ReplicatedStorage.Shared.CurrencyConfig)
 
 local DEBUG_PREFIX = "[PartsCollector]"
 local BROKEN_CAR_GENERATE_INTERVAL_SECONDS = 1
+local BROKEN_CAR_BASE_PARTS_PER_TICK = 1
 local MAX_STORED_PARTS = 999999
 local COLLECT_DEBOUNCE_SECONDS = 0.75
 local COLLECT_FLASH_SECONDS = 0.18
@@ -17,6 +18,16 @@ local BROKEN_CAR_NAMES = { "BrokenCar_01", "BrokenCar_02", "BrokenCar_03" }
 local collectDebounces = {}
 local counterValueLabels = {}
 local activeBrokenCarLoops = {}
+local incomeMultiplierConnection = nil
+
+local function formatNumber(value)
+	local roundedValue = math.round(value * 10) / 10
+	if roundedValue % 1 == 0 then
+		return string.format("%d", math.floor(roundedValue))
+	end
+
+	return string.format("%.1f", roundedValue)
+end
 
 local function log(message)
 	print(string.format("%s %s", DEBUG_PREFIX, message))
@@ -83,7 +94,7 @@ end
 local function setStoredParts(collector, value)
 	local clampedValue = math.clamp(value, 0, MAX_STORED_PARTS)
 	collector:SetAttribute("StoredParts", clampedValue)
-	log(string.format("%s StoredParts changed to %d", collector.Name, clampedValue))
+	log(string.format("%s StoredParts changed to %s", collector.Name, formatNumber(clampedValue)))
 end
 
 local function findPartsCounter(collector)
@@ -168,7 +179,7 @@ local function setupCounterText(collector)
 	end
 
 	titleLabel.Text = "Stored Parts"
-	valueLabel.Text = tostring(getStoredParts(collector))
+	valueLabel.Text = formatNumber(getStoredParts(collector))
 	counterValueLabels[collector] = valueLabel
 	log(string.format("counter text connected for %s using %s", collector.Name, valueLabel:GetFullName()))
 end
@@ -176,7 +187,7 @@ end
 local function updateCounterValue(collector)
 	local valueLabel = counterValueLabels[collector]
 	if valueLabel and valueLabel.Parent then
-		valueLabel.Text = tostring(getStoredParts(collector))
+		valueLabel.Text = formatNumber(getStoredParts(collector))
 	end
 end
 
@@ -193,7 +204,7 @@ local function showCollectPopup(collectPad, amount)
 	label.BackgroundTransparency = 1
 	label.Font = Enum.Font.GothamBold
 	label.Size = UDim2.fromScale(1, 1)
-	label.Text = string.format("+%d Parts", amount)
+	label.Text = string.format("+%s Parts", formatNumber(amount))
 	label.TextColor3 = Color3.fromRGB(255, 239, 156)
 	label.TextScaled = true
 	label.TextStrokeTransparency = 0.25
@@ -258,6 +269,57 @@ local function getBrokenCarsFolder()
 	return unlockObjects and unlockObjects:FindFirstChild("BrokenCars")
 end
 
+local function getScrapyardIncomeMultiplier()
+	local scrapyard = Workspace:FindFirstChild("Scrapyard")
+	local multiplier = scrapyard and scrapyard:GetAttribute(CurrencyConfig.PartsIncomeMultiplierAttribute)
+	if typeof(multiplier) == "number" and multiplier > 0 then
+		return multiplier
+	end
+
+	return 1
+end
+
+local function getActiveBrokenCarCount()
+	local count = 0
+	for _, active in activeBrokenCarLoops do
+		if active then
+			count += 1
+		end
+	end
+
+	return count
+end
+
+local function getEffectivePartsIncomeRate()
+	return getActiveBrokenCarCount() * BROKEN_CAR_BASE_PARTS_PER_TICK * getScrapyardIncomeMultiplier()
+end
+
+local function updatePlayerIncomeRates()
+	local rate = getEffectivePartsIncomeRate()
+	for _, player in Players:GetPlayers() do
+		player:SetAttribute(CurrencyConfig.PartsIncomeRateAttribute, rate)
+	end
+end
+
+local function watchIncomeMultiplier()
+	if incomeMultiplierConnection then
+		return
+	end
+
+	local scrapyard = Workspace:FindFirstChild("Scrapyard")
+	if not scrapyard then
+		warnCollector("Workspace.Scrapyard not found; Parts income multiplier updates are paused")
+		return
+	end
+
+	if scrapyard:GetAttribute(CurrencyConfig.PartsIncomeMultiplierAttribute) == nil then
+		scrapyard:SetAttribute(CurrencyConfig.PartsIncomeMultiplierAttribute, 1)
+	end
+
+	incomeMultiplierConnection = scrapyard:GetAttributeChangedSignal(CurrencyConfig.PartsIncomeMultiplierAttribute):Connect(updatePlayerIncomeRates)
+	updatePlayerIncomeRates()
+end
+
 local function isBrokenCarActive(brokenCar)
 	if not brokenCar then
 		return false
@@ -279,6 +341,7 @@ local function startBrokenCarIncomeLoop(collector, brokenCar)
 
 	activeBrokenCarLoops[brokenCar] = true
 	log(string.format("%s started +1/sec StoredParts loop for %s", collector.Name, brokenCar.Name))
+	updatePlayerIncomeRates()
 
 	task.spawn(function()
 		while collector.Parent and brokenCar.Parent and activeBrokenCarLoops[brokenCar] do
@@ -288,13 +351,21 @@ local function startBrokenCarIncomeLoop(collector, brokenCar)
 				break
 			end
 
-			setStoredParts(collector, getStoredParts(collector) + 1)
+			setStoredParts(collector, getStoredParts(collector) + (BROKEN_CAR_BASE_PARTS_PER_TICK * getScrapyardIncomeMultiplier()))
+		end
+
+		if activeBrokenCarLoops[brokenCar] then
+			activeBrokenCarLoops[brokenCar] = nil
+			updatePlayerIncomeRates()
 		end
 	end)
 end
 
 local function stopBrokenCarIncomeLoop(brokenCar)
-	activeBrokenCarLoops[brokenCar] = nil
+	if activeBrokenCarLoops[brokenCar] then
+		activeBrokenCarLoops[brokenCar] = nil
+		updatePlayerIncomeRates()
+	end
 end
 
 local function watchBrokenCarIncome(collector, brokenCar)
@@ -349,7 +420,7 @@ local function collectStoredParts(player, collector)
 
 	parts.Value += storedParts
 	setStoredParts(collector, 0)
-	log(string.format("%s collected %d Parts from %s", player.Name, storedParts, collector.Name))
+	log(string.format("%s collected %s Parts from %s", player.Name, formatNumber(storedParts), collector.Name))
 	return storedParts
 end
 
@@ -396,9 +467,14 @@ local function setupCollector(collector)
 		updateCounterValue(collector)
 	end)
 	connectCollectPad(collector, collectPad)
+	watchIncomeMultiplier()
 	watchBrokenCars(collector)
 end
 
 for _, collector in CollectionService:GetTagged("Collector") do
 	setupCollector(collector)
 end
+
+Players.PlayerAdded:Connect(function(player)
+	player:SetAttribute(CurrencyConfig.PartsIncomeRateAttribute, getEffectivePartsIncomeRate())
+end)

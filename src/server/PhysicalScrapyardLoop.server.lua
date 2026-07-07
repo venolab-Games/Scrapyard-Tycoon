@@ -37,6 +37,7 @@ local buildSteps = {
 		displayName = "Workbench",
 		cost = 50,
 		clearProductionAttributes = true,
+		incomeMultiplier = 1.5,
 		revealObjects = { "Workbench" },
 		revealButtons = {},
 	},
@@ -82,6 +83,10 @@ local buildButtons = scrapyard and scrapyard:FindFirstChild("BuildButtons")
 local hiddenButtons = scrapyard and scrapyard:FindFirstChild("HiddenButtons")
 local unlockObjects = scrapyard and scrapyard:FindFirstChild("UnlockObjects")
 local brokenCars = unlockObjects and unlockObjects:FindFirstChild("BrokenCars")
+
+if scrapyard then
+	scrapyard:SetAttribute(CurrencyConfig.PartsIncomeMultiplierAttribute, 1)
+end
 
 local function debugLog(message)
 	print(string.format("%s %s", DEBUG_PREFIX, message))
@@ -430,6 +435,24 @@ local function getButtonPartsPerSecond(button)
 	return 0
 end
 
+local function getButtonIncomeMultiplier(button)
+	local multiplier = button:GetAttribute(CurrencyConfig.PartsIncomeMultiplierAttribute)
+	if typeof(multiplier) == "number" then
+		return multiplier
+	end
+
+	return 1
+end
+
+local function formatNumber(value)
+	local roundedValue = math.round(value * 10) / 10
+	if roundedValue % 1 == 0 then
+		return string.format("%d", math.floor(roundedValue))
+	end
+
+	return string.format("%.1f", roundedValue)
+end
+
 local function formatButtonBuildCost(cost)
 	if typeof(cost) ~= "number" then
 		return "Cost: ? Parts"
@@ -509,12 +532,18 @@ local function updateButtonLabelText(button)
 		local production = findButtonLabelText(labelGui, "Production")
 		if production then
 			local partsPerSecond = getButtonPartsPerSecond(button)
-			production.Visible = partsPerSecond > 0
 			if partsPerSecond > 0 then
+				production.Visible = true
 				if partsPerSecond % 1 == 0 then
 					production.Text = string.format("Produces: +%d Part/sec", partsPerSecond)
 				else
 					production.Text = string.format("Produces: +%.2f Part/sec", partsPerSecond)
+				end
+			else
+				local incomeMultiplier = getButtonIncomeMultiplier(button)
+				production.Visible = incomeMultiplier > 1
+				if incomeMultiplier > 1 then
+					production.Text = string.format("Production: x%.1f Parts", incomeMultiplier)
 				end
 			end
 		end
@@ -672,6 +701,9 @@ local function setupButtonLabel(button)
 			updateButtonLabelText(button)
 		end),
 		button:GetAttributeChangedSignal("PartsPerSecond"):Connect(function()
+			updateButtonLabelText(button)
+		end),
+		button:GetAttributeChangedSignal(CurrencyConfig.PartsIncomeMultiplierAttribute):Connect(function()
 			updateButtonLabelText(button)
 		end),
 		touchPart:GetPropertyChangedSignal("Transparency"):Connect(function()
@@ -890,12 +922,12 @@ local function purchaseBuildStep(player, step)
 
 	local cost = button:GetAttribute("BuildCost") or step.cost
 	if parts.Value < cost then
-		debugLog(string.format("touch unaffordable: %s touched %s with %d Parts; needs %d", player.Name, step.buttonName, parts.Value, cost))
+		debugLog(string.format("touch unaffordable: %s touched %s with %s Parts; needs %s", player.Name, step.buttonName, formatNumber(parts.Value), formatNumber(cost)))
 		updateButtonAffordability()
 		return
 	end
 
-	debugLog(string.format("purchase success: %s bought %s for %d Parts", player.Name, step.buttonName, cost))
+	debugLog(string.format("purchase success: %s bought %s for %s Parts", player.Name, step.buttonName, formatNumber(cost)))
 	parts.Value -= cost
 	hidePurchasedButton(button, step.buttonName)
 
@@ -905,6 +937,10 @@ local function purchaseBuildStep(player, step)
 
 	for _, buttonName in step.revealButtons do
 		revealButton(buttonName)
+	end
+
+	if step.incomeMultiplier and scrapyard then
+		scrapyard:SetAttribute(CurrencyConfig.PartsIncomeMultiplierAttribute, step.incomeMultiplier)
 	end
 
 	updateButtonAffordability()
@@ -958,6 +994,9 @@ local function setupBuildButton(step)
 	if step.clearProductionAttributes then
 		button:SetAttribute("ProducesPartsPerSecond", nil)
 		button:SetAttribute("PartsPerSecond", nil)
+	end
+	if step.incomeMultiplier then
+		button:SetAttribute(CurrencyConfig.PartsIncomeMultiplierAttribute, step.incomeMultiplier)
 	end
 	if step.producesPartsPerSecond and button:GetAttribute("ProducesPartsPerSecond") == nil and button:GetAttribute("PartsPerSecond") == nil then
 		button:SetAttribute("ProducesPartsPerSecond", step.producesPartsPerSecond)
