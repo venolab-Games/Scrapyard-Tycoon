@@ -20,6 +20,8 @@ local BUTTON_LABEL_NAME = "BuildButtonLabel"
 local BUTTON_LABEL_SIGN_NAME = "BuildButtonLabelSign"
 local BUTTON_LABEL_SIGN_TAG = "BuildButtonLabelSign"
 local LEGACY_BUTTON_LABEL_ANCHOR_NAME = "BuildButtonLabelAnchor"
+local REMOTES_FOLDER_NAME = "Remotes"
+local INSUFFICIENT_PARTS_REMOTE_NAME = "ShowInsufficientPartsFeedback"
 local buttonLabelConnections = {}
 
 local buildSteps = {
@@ -92,6 +94,36 @@ local buildButtons = scrapyard and scrapyard:FindFirstChild("BuildButtons")
 local hiddenButtons = scrapyard and scrapyard:FindFirstChild("HiddenButtons")
 local unlockObjects = scrapyard and scrapyard:FindFirstChild("UnlockObjects")
 local brokenCars = unlockObjects and unlockObjects:FindFirstChild("BrokenCars")
+local remotesFolder = ReplicatedStorage:FindFirstChild(REMOTES_FOLDER_NAME)
+if remotesFolder and not remotesFolder:IsA("Folder") then
+	warn(string.format("%s ReplicatedStorage.%s exists but is not a Folder; insufficient Parts feedback remote will be created in ReplicatedStorage", DEBUG_PREFIX, REMOTES_FOLDER_NAME))
+	remotesFolder = ReplicatedStorage
+end
+if not remotesFolder then
+	remotesFolder = Instance.new("Folder")
+	remotesFolder.Name = REMOTES_FOLDER_NAME
+	remotesFolder.Parent = ReplicatedStorage
+end
+
+local function findRemoteEvent(parent, remoteName)
+	for _, child in parent:GetChildren() do
+		if child.Name == remoteName and child:IsA("RemoteEvent") then
+			return child
+		end
+	end
+
+	return nil
+end
+
+local insufficientPartsRemote = findRemoteEvent(remotesFolder, INSUFFICIENT_PARTS_REMOTE_NAME)
+if remotesFolder:FindFirstChild(INSUFFICIENT_PARTS_REMOTE_NAME) and not insufficientPartsRemote then
+	warn(string.format("%s %s.%s exists but is not a RemoteEvent; replacing feedback remote reference", DEBUG_PREFIX, remotesFolder:GetFullName(), INSUFFICIENT_PARTS_REMOTE_NAME))
+end
+if not insufficientPartsRemote then
+	insufficientPartsRemote = Instance.new("RemoteEvent")
+	insufficientPartsRemote.Name = INSUFFICIENT_PARTS_REMOTE_NAME
+	insufficientPartsRemote.Parent = remotesFolder
+end
 
 if scrapyard then
 	scrapyard:SetAttribute(CurrencyConfig.PartsIncomeMultiplierAttribute, 1)
@@ -462,11 +494,7 @@ local function formatButtonBuildCost(cost)
 		return "Cost: ? Parts"
 	end
 
-	if cost % 1 == 0 then
-		return string.format("Cost: %d Parts", cost)
-	end
-
-	return string.format("Cost: %.2f Parts", cost)
+	return string.format("Cost: %s Parts", formatWholeNumber(cost))
 end
 
 local function findButtonLabelText(labelGui, textName)
@@ -538,11 +566,7 @@ local function updateButtonLabelText(button)
 			local partsPerSecond = getButtonPartsPerSecond(button)
 			if partsPerSecond > 0 then
 				production.Visible = true
-				if partsPerSecond % 1 == 0 then
-					production.Text = string.format("Production: +%d parts/sec", partsPerSecond)
-				else
-					production.Text = string.format("Production: +%.2f parts/sec", partsPerSecond)
-				end
+				production.Text = string.format("Production: +%s parts/sec", formatWholeNumber(partsPerSecond))
 			else
 				local incomeMultiplier = getButtonIncomeMultiplier(button)
 				production.Visible = incomeMultiplier > 1
@@ -916,6 +940,10 @@ local function hidePurchasedButton(button, buttonName)
 	updateButtonLabelVisibility(button)
 end
 
+local function showInsufficientPartsFeedback(player, failedCost)
+	insufficientPartsRemote:FireClient(player, failedCost)
+end
+
 local function purchaseBuildStep(player, step)
 	debugLog(string.format("purchase attempt for %s by %s", step.buttonName, player.Name))
 
@@ -926,8 +954,16 @@ local function purchaseBuildStep(player, step)
 	end
 
 	local cost = button:GetAttribute("BuildCost") or step.cost
+	if typeof(cost) ~= "number" then
+		warn(string.format("%s %s has nonnumeric BuildCost; purchase blocked", DEBUG_PREFIX, step.buttonName))
+		showInsufficientPartsFeedback(player, nil)
+		updateButtonAffordability()
+		return
+	end
+
 	if parts.Value < cost then
 		debugLog(string.format("touch unaffordable: %s touched %s with %s Parts; needs %s", player.Name, step.buttonName, formatWholeNumber(parts.Value), formatWholeNumber(cost)))
+		showInsufficientPartsFeedback(player, cost)
 		updateButtonAffordability()
 		return
 	end
