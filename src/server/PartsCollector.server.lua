@@ -13,7 +13,15 @@ local MAX_STORED_PARTS = 999999
 local COLLECT_DEBOUNCE_SECONDS = 0.75
 local COLLECT_FLASH_SECONDS = 0.18
 local COLLECT_POPUP_SECONDS = 0.8
-local BROKEN_CAR_NAMES = { "BrokenCar_01", "BrokenCar_02", "BrokenCar_03" }
+local BROKEN_CAR_NAMES = {
+	"BrokenCar_01",
+	"BrokenCar_02",
+	"BrokenCar_03",
+	"BrokenCar_04",
+	"BrokenCar_05",
+	"BrokenCar_06",
+	"BrokenCar_07",
+}
 
 local collectDebounces = {}
 local counterValueLabels = {}

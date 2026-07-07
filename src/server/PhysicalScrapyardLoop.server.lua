@@ -59,7 +59,7 @@ local buildSteps = {
 				},
 			},
 		},
-		revealButtons = {},
+		revealButtons = { "BuildButton_BrokenCar_04" },
 	},
 	{
 		buttonName = "BuildButton_Workbench",
@@ -97,6 +97,42 @@ local buildSteps = {
 		producesPartsPerSecond = 1,
 		revealObjects = { "BrokenCar_03" },
 		revealButtons = { "BuildButton_ExpandScrapyard" },
+	},
+	{
+		buttonName = "BuildButton_BrokenCar_04",
+		buttonFolder = "HiddenButtons",
+		displayName = "Broken Car",
+		cost = 200,
+		producesPartsPerSecond = 1,
+		revealObjects = { "BrokenCar_04" },
+		revealButtons = { "BuildButton_BrokenCar_05" },
+	},
+	{
+		buttonName = "BuildButton_BrokenCar_05",
+		buttonFolder = "HiddenButtons",
+		displayName = "Broken Car",
+		cost = 300,
+		producesPartsPerSecond = 1,
+		revealObjects = { "BrokenCar_05" },
+		revealButtons = { "BuildButton_BrokenCar_06" },
+	},
+	{
+		buttonName = "BuildButton_BrokenCar_06",
+		buttonFolder = "HiddenButtons",
+		displayName = "Broken Car",
+		cost = 450,
+		producesPartsPerSecond = 1,
+		revealObjects = { "BrokenCar_06" },
+		revealButtons = { "BuildButton_BrokenCar_07" },
+	},
+	{
+		buttonName = "BuildButton_BrokenCar_07",
+		buttonFolder = "HiddenButtons",
+		displayName = "Broken Car",
+		cost = 650,
+		producesPartsPerSecond = 1,
+		revealObjects = { "BrokenCar_07" },
+		revealButtons = {},
 	},
 }
 
@@ -310,7 +346,23 @@ end
 
 local function getRevealObject(objectName)
 	if objectName:match("^BrokenCar_") then
-		return brokenCars and brokenCars:FindFirstChild(objectName)
+		local brokenCar = brokenCars and brokenCars:FindFirstChild(objectName)
+		if brokenCar then
+			return brokenCar
+		end
+
+		local misplacedBrokenCar = unlockObjects and unlockObjects:FindFirstChild(objectName)
+		if misplacedBrokenCar then
+			warn(string.format(
+				"%s Found %s directly under %s. Move it into Workspace > Scrapyard > UnlockObjects > BrokenCars in Studio so collector income can track it reliably.",
+				DEBUG_PREFIX,
+				objectName,
+				unlockObjects:GetFullName()
+			))
+			return misplacedBrokenCar
+		end
+
+		return nil
 	end
 
 	local object = unlockObjects and unlockObjects:FindFirstChild(objectName)
@@ -341,6 +393,78 @@ local function getExpectedUnlockPath(objectName)
 	end
 
 	return string.format("Workspace > Scrapyard > UnlockObjects > %s", objectName)
+end
+
+local function countNamedDescendants(root, objectName)
+	local count = 0
+	if not root then
+		return count
+	end
+
+	for _, descendant in root:GetDescendants() do
+		if descendant.Name == objectName then
+			count += 1
+		end
+	end
+
+	return count
+end
+
+local function warnDuplicateExpectedObjects()
+	for _, step in buildSteps do
+		local buttonCount = countNamedDescendants(scrapyard, step.buttonName)
+		if buttonCount > 1 then
+			warn(string.format("%s Expected unique button %s has %d matching descendants in Workspace.Scrapyard; fix duplicates in Studio", DEBUG_PREFIX, step.buttonName, buttonCount))
+		end
+
+		for _, objectName in step.revealObjects do
+			local searchRoot = objectName:match("^BrokenCar_") and brokenCars or unlockObjects
+			local objectCount = countNamedDescendants(searchRoot, objectName)
+			if objectCount > 1 then
+				warn(string.format("%s Expected unique unlock object %s has %d matching descendants under %s; fix duplicates in Studio", DEBUG_PREFIX, objectName, objectCount, searchRoot and searchRoot:GetFullName() or "nil"))
+			end
+		end
+	end
+end
+
+local function validateExpansionBrokenCarButtonSetup()
+	for index = 4, 7 do
+		local buttonName = string.format("BuildButton_BrokenCar_%02d", index)
+		local button = getExpectedButton(buttonName)
+		if not button then
+			warnMissing(string.format("Workspace > Scrapyard > HiddenButtons > %s", buttonName))
+			continue
+		end
+
+		if not CollectionService:HasTag(button, "Button") then
+			warn(string.format("%s %s must have exact CollectionService tag Button", DEBUG_PREFIX, button:GetFullName()))
+		end
+
+		local buttonPart = findDescendantByName(button, "ButtonPart")
+		if not buttonPart or not buttonPart:IsA("BasePart") then
+			warn(string.format("%s %s must contain a BasePart named ButtonPart for touch purchasing", DEBUG_PREFIX, button:GetFullName()))
+		end
+
+		local displayName = button:GetAttribute("DisplayName")
+		if typeof(displayName) == "string" and displayName ~= "" and displayName ~= "Broken Car" then
+			warn(string.format(
+				"%s %s has DisplayName=%s; expected Broken Car. If expansion buttons appear out of order, verify this Studio model is the numbered %s object.",
+				DEBUG_PREFIX,
+				button:GetFullName(),
+				displayName,
+				buttonName
+			))
+		end
+
+		if button:GetAttribute("BuildCost") == nil then
+			warn(string.format("%s %s missing BuildCost; prototype default will be seeded by setup", DEBUG_PREFIX, button:GetFullName()))
+		end
+
+		local sign = button:FindFirstChild(BUTTON_LABEL_SIGN_NAME)
+		if sign and not sign:IsA("BasePart") then
+			warn(string.format("%s %s has %s but it is not a BasePart", DEBUG_PREFIX, button:GetFullName(), BUTTON_LABEL_SIGN_NAME))
+		end
+	end
 end
 
 local function eachSelfAndDescendant(instance, callback)
@@ -1385,8 +1509,14 @@ end
 local function hideInitialButton(buttonName)
 	local button = buttonsByName[buttonName]
 	if not button then
-		warnMissing(string.format("Workspace > Scrapyard > HiddenButtons > %s", buttonName))
-		return
+		local step = findBuildStep(buttonName)
+		button = step and getExpectedButtonForStep(step)
+		if button then
+			warn(string.format("%s %s was not fully set up as a tagged build button, but will still be hidden at startup", DEBUG_PREFIX, button:GetFullName()))
+		else
+			warnMissing(string.format("Workspace > Scrapyard > HiddenButtons > %s", buttonName))
+			return
+		end
 	end
 
 	local processed = setObjectHidden(button, true)
@@ -1421,6 +1551,10 @@ local function hideInitialScrapyardObjects()
 	hideInitialObject("BrokenCar_01")
 	hideInitialObject("BrokenCar_02")
 	hideInitialObject("BrokenCar_03")
+	hideInitialObject("BrokenCar_04")
+	hideInitialObject("BrokenCar_05")
+	hideInitialObject("BrokenCar_06")
+	hideInitialObject("BrokenCar_07")
 	hideInitialObject("Workbench")
 	hideInitialObject("ScrapyardSlab_02")
 	hideInitialObject("ScrapyardFence_02")
@@ -1439,6 +1573,8 @@ local function watchPlayerParts(player)
 end
 
 scanTaggedButtons()
+warnDuplicateExpectedObjects()
+validateExpansionBrokenCarButtonSetup()
 setupTaggedButtonLabels()
 hideInitialScrapyardObjects()
 setupBuildButtons()
