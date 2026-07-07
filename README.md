@@ -1,6 +1,6 @@
-# Scrapyard Tycoon
+# Scrapyard Tycoon (ROBLOX)
 
-Scrapyard Tycoon is a small Roblox tycoon prototype about building up an old scrapyard one unlock at a time.
+Scrapyard Tycoon (ROBLOX) is a small Roblox tycoon prototype about building up an old scrapyard one unlock at a time.
 
 The current goal is not to build a giant finished tycoon yet. The goal is to make a tiny playable loop that works, feels readable, and can grow without becoming messy too early.
 
