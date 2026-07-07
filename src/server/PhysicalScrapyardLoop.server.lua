@@ -26,6 +26,7 @@ local buildSteps = {
 	{
 		buttonName = "BuildButton_UnlockScrapyard",
 		buttonFolder = "BuildButtons",
+		displayName = "Unlock Scrapyard",
 		cost = 10,
 		revealObjects = { "Fence" },
 		revealButtons = { "BuildButton_BrokenCar_01", "BuildButton_Workbench" },
@@ -42,6 +43,7 @@ local buildSteps = {
 	{
 		buttonName = "BuildButton_BrokenCar_01",
 		buttonFolder = "HiddenButtons",
+		displayName = "Broken Car",
 		cost = 15,
 		producesPartsPerSecond = 1,
 		revealObjects = { "BrokenCar_01" },
@@ -50,6 +52,7 @@ local buildSteps = {
 	{
 		buttonName = "BuildButton_BrokenCar_02",
 		buttonFolder = "HiddenButtons",
+		displayName = "Broken Car",
 		cost = 23,
 		producesPartsPerSecond = 1,
 		revealObjects = { "BrokenCar_02" },
@@ -58,6 +61,7 @@ local buildSteps = {
 	{
 		buttonName = "BuildButton_BrokenCar_03",
 		buttonFolder = "HiddenButtons",
+		displayName = "Broken Car",
 		cost = 34,
 		producesPartsPerSecond = 1,
 		revealObjects = { "BrokenCar_03" },
