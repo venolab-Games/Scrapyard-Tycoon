@@ -30,7 +30,7 @@ local buildSteps = {
 		buttonFolder = "BuildButtons",
 		displayName = "Unlock Scrapyard",
 		cost = 10,
-		revealObjects = { "Fence" },
+		revealObjects = { "ScrapyardFence_01" },
 		revealButtons = { "BuildButton_BrokenCar_01", "BuildButton_Workbench" },
 	},
 	{
@@ -40,7 +40,25 @@ local buildSteps = {
 		displayName = "Expand Scrapyard",
 		cost = 150,
 		clearProductionAttributes = true,
-		revealObjects = { "ScrapyardSlab_02" },
+		revealObjects = { "ScrapyardSlab_02", "ScrapyardFence_02" },
+		hideDescendants = {
+			{
+				objectName = "ScrapyardFence_01",
+				descendantNames = {
+					"FenceBeam_05",
+					"FenceBeam_06",
+					"FenceBeam_07",
+					"FenceBeam_08",
+					"FenceBeam_09",
+					"FenceBeam_10",
+					"FencePost_07",
+					"FencePost_08",
+					"FencePost_09",
+					"FencePost_10",
+					"FencePost_11",
+				},
+			},
+		},
 		revealButtons = {},
 	},
 	{
@@ -83,6 +101,7 @@ local buildSteps = {
 }
 
 local revealObjectAliases = {
+	ScrapyardFence_01 = { "Fence" },
 	ScrapyardSlab_02 = { "GardenSlab" },
 }
 
@@ -290,10 +309,6 @@ local function getBuildButton(buttonName, buttonFolder)
 end
 
 local function getRevealObject(objectName)
-	if objectName == "Fence" then
-		return unlockObjects and unlockObjects:FindFirstChild(objectName)
-	end
-
 	if objectName:match("^BrokenCar_") then
 		return brokenCars and brokenCars:FindFirstChild(objectName)
 	end
@@ -318,6 +333,14 @@ local function getRevealObject(objectName)
 	end
 
 	return nil
+end
+
+local function getExpectedUnlockPath(objectName)
+	if objectName:match("^BrokenCar_") then
+		return string.format("Workspace > Scrapyard > UnlockObjects > BrokenCars > %s", objectName)
+	end
+
+	return string.format("Workspace > Scrapyard > UnlockObjects > %s", objectName)
 end
 
 local function eachSelfAndDescendant(instance, callback)
@@ -965,13 +988,7 @@ local function revealObject(objectName)
 
 	local object = getRevealObject(objectName)
 	if not object then
-		if objectName == "Fence" then
-			warnMissing(string.format("Workspace > Scrapyard > UnlockObjects > %s", objectName))
-		elseif objectName:match("^BrokenCar_") then
-			warnMissing(string.format("Workspace > Scrapyard > UnlockObjects > BrokenCars > %s", objectName))
-		else
-			warnMissing(string.format("Workspace > Scrapyard > UnlockObjects > %s", objectName))
-		end
+		warnMissing(getExpectedUnlockPath(objectName))
 		return
 	end
 
@@ -983,7 +1000,7 @@ local function revealObject(objectName)
 		debugLog(string.format("%s marked CollectorActive for Parts collector income", objectName))
 	end
 
-	if objectName == "Fence" then
+	if objectName == "ScrapyardFence_01" then
 		logVisibilitySample(objectName, object)
 	end
 end
@@ -1010,6 +1027,26 @@ local function hidePurchasedButton(button, buttonName)
 	setButtonColor(button, BUTTON_COLORS.Purchased)
 	setObjectHidden(button, true)
 	updateButtonLabelVisibility(button)
+end
+
+local function hideNamedUnlockDescendants(step)
+	for _, hideConfig in step.hideDescendants or {} do
+		local object = getRevealObject(hideConfig.objectName)
+		if not object then
+			warnMissing(getExpectedUnlockPath(hideConfig.objectName))
+			continue
+		end
+
+		for _, descendantName in hideConfig.descendantNames or {} do
+			local descendant = findDescendantByName(object, descendantName)
+			if descendant then
+				local processed = setObjectHidden(descendant, true)
+				debugLog(string.format("hid %s descendant %s; processed %d descendants", hideConfig.objectName, descendantName, processed))
+			else
+				warn(string.format("%s Missing expansion opening piece %s under %s", DEBUG_PREFIX, descendantName, object:GetFullName()))
+			end
+		end
+	end
 end
 
 local function showInsufficientPartsFeedback(player, failedCost)
@@ -1047,6 +1084,8 @@ local function purchaseBuildStep(player, step)
 	for _, objectName in step.revealObjects do
 		revealObject(objectName)
 	end
+
+	hideNamedUnlockDescendants(step)
 
 	for _, buttonName in step.revealButtons do
 		revealButton(buttonName)
@@ -1332,13 +1371,7 @@ end
 local function hideInitialObject(objectName)
 	local object = getRevealObject(objectName)
 	if not object then
-		if objectName == "Fence" then
-			warnMissing(string.format("Workspace > Scrapyard > UnlockObjects > %s", objectName))
-		elseif objectName:match("^BrokenCar_") then
-			warnMissing(string.format("Workspace > Scrapyard > UnlockObjects > BrokenCars > %s", objectName))
-		else
-			warnMissing(string.format("Workspace > Scrapyard > UnlockObjects > %s", objectName))
-		end
+		warnMissing(getExpectedUnlockPath(objectName))
 		return
 	end
 
@@ -1384,12 +1417,13 @@ local function setupBuildButtons()
 end
 
 local function hideInitialScrapyardObjects()
-	hideInitialObject("Fence")
+	hideInitialObject("ScrapyardFence_01")
 	hideInitialObject("BrokenCar_01")
 	hideInitialObject("BrokenCar_02")
 	hideInitialObject("BrokenCar_03")
 	hideInitialObject("Workbench")
 	hideInitialObject("ScrapyardSlab_02")
+	hideInitialObject("ScrapyardFence_02")
 end
 
 local function watchPlayerParts(player)
