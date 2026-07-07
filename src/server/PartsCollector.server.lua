@@ -18,15 +18,11 @@ local BROKEN_CAR_NAMES = { "BrokenCar_01", "BrokenCar_02", "BrokenCar_03" }
 local collectDebounces = {}
 local counterValueLabels = {}
 local activeBrokenCarLoops = {}
+local brokenCarRemainders = {}
 local incomeMultiplierConnection = nil
 
-local function formatNumber(value)
-	local roundedValue = math.round(value * 10) / 10
-	if roundedValue % 1 == 0 then
-		return string.format("%d", math.floor(roundedValue))
-	end
-
-	return string.format("%.1f", roundedValue)
+local function formatWholeNumber(value)
+	return string.format("%d", math.floor(value))
 end
 
 local function log(message)
@@ -88,13 +84,18 @@ local function getStoredParts(collector)
 		return 0
 	end
 
-	return storedParts
+	local wholeStoredParts = math.floor(storedParts)
+	if storedParts ~= wholeStoredParts then
+		collector:SetAttribute("StoredParts", wholeStoredParts)
+	end
+
+	return wholeStoredParts
 end
 
 local function setStoredParts(collector, value)
-	local clampedValue = math.clamp(value, 0, MAX_STORED_PARTS)
+	local clampedValue = math.clamp(math.floor(value), 0, MAX_STORED_PARTS)
 	collector:SetAttribute("StoredParts", clampedValue)
-	log(string.format("%s StoredParts changed to %s", collector.Name, formatNumber(clampedValue)))
+	log(string.format("%s StoredParts changed to %s", collector.Name, formatWholeNumber(clampedValue)))
 end
 
 local function findPartsCounter(collector)
@@ -179,7 +180,7 @@ local function setupCounterText(collector)
 	end
 
 	titleLabel.Text = "Stored Parts"
-	valueLabel.Text = formatNumber(getStoredParts(collector))
+	valueLabel.Text = formatWholeNumber(getStoredParts(collector))
 	counterValueLabels[collector] = valueLabel
 	log(string.format("counter text connected for %s using %s", collector.Name, valueLabel:GetFullName()))
 end
@@ -187,7 +188,7 @@ end
 local function updateCounterValue(collector)
 	local valueLabel = counterValueLabels[collector]
 	if valueLabel and valueLabel.Parent then
-		valueLabel.Text = formatNumber(getStoredParts(collector))
+		valueLabel.Text = formatWholeNumber(getStoredParts(collector))
 	end
 end
 
@@ -204,7 +205,7 @@ local function showCollectPopup(collectPad, amount)
 	label.BackgroundTransparency = 1
 	label.Font = Enum.Font.GothamBold
 	label.Size = UDim2.fromScale(1, 1)
-	label.Text = string.format("+%s Parts", formatNumber(amount))
+	label.Text = string.format("+%s Parts", formatWholeNumber(amount))
 	label.TextColor3 = Color3.fromRGB(255, 239, 156)
 	label.TextScaled = true
 	label.TextStrokeTransparency = 0.25
@@ -291,7 +292,15 @@ local function getActiveBrokenCarCount()
 end
 
 local function getEffectivePartsIncomeRate()
-	return getActiveBrokenCarCount() * BROKEN_CAR_BASE_PARTS_PER_TICK * getScrapyardIncomeMultiplier()
+	return math.floor(getActiveBrokenCarCount() * BROKEN_CAR_BASE_PARTS_PER_TICK * getScrapyardIncomeMultiplier())
+end
+
+local function getBrokenCarPartsForTick(brokenCar)
+	local rawParts = (brokenCarRemainders[brokenCar] or 0) + (BROKEN_CAR_BASE_PARTS_PER_TICK * getScrapyardIncomeMultiplier())
+	local wholeParts = math.floor(rawParts)
+	brokenCarRemainders[brokenCar] = rawParts - wholeParts
+
+	return wholeParts
 end
 
 local function updatePlayerIncomeRates()
@@ -351,11 +360,15 @@ local function startBrokenCarIncomeLoop(collector, brokenCar)
 				break
 			end
 
-			setStoredParts(collector, getStoredParts(collector) + (BROKEN_CAR_BASE_PARTS_PER_TICK * getScrapyardIncomeMultiplier()))
+			local partsToStore = getBrokenCarPartsForTick(brokenCar)
+			if partsToStore > 0 then
+				setStoredParts(collector, getStoredParts(collector) + partsToStore)
+			end
 		end
 
 		if activeBrokenCarLoops[brokenCar] then
 			activeBrokenCarLoops[brokenCar] = nil
+			brokenCarRemainders[brokenCar] = nil
 			updatePlayerIncomeRates()
 		end
 	end)
@@ -364,6 +377,7 @@ end
 local function stopBrokenCarIncomeLoop(brokenCar)
 	if activeBrokenCarLoops[brokenCar] then
 		activeBrokenCarLoops[brokenCar] = nil
+		brokenCarRemainders[brokenCar] = nil
 		updatePlayerIncomeRates()
 	end
 end
@@ -420,7 +434,7 @@ local function collectStoredParts(player, collector)
 
 	parts.Value += storedParts
 	setStoredParts(collector, 0)
-	log(string.format("%s collected %s Parts from %s", player.Name, formatNumber(storedParts), collector.Name))
+	log(string.format("%s collected %s Parts from %s", player.Name, formatWholeNumber(storedParts), collector.Name))
 	return storedParts
 end
 

@@ -10,7 +10,7 @@ local function setupCurrency(player)
 	leaderstats.Name = "leaderstats"
 	leaderstats.Parent = player
 
-	local parts = Instance.new("NumberValue")
+	local parts = Instance.new("IntValue")
 	parts.Name = CurrencyConfig.PartsName
 	parts.Value = STARTING_PARTS
 	parts.Parent = leaderstats

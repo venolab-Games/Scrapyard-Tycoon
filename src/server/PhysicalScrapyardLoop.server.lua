@@ -32,6 +32,15 @@ local buildSteps = {
 		revealButtons = { "BuildButton_BrokenCar_01", "BuildButton_Workbench" },
 	},
 	{
+		buttonName = "BuildButton_Garden",
+		buttonFolder = "HiddenButtons",
+		displayName = "Unlock Garden",
+		cost = 150,
+		clearProductionAttributes = true,
+		revealObjects = { "GardenSlab" },
+		revealButtons = {},
+	},
+	{
 		buttonName = "BuildButton_Workbench",
 		buttonFolder = "HiddenButtons",
 		displayName = "Workbench",
@@ -66,7 +75,7 @@ local buildSteps = {
 		cost = 34,
 		producesPartsPerSecond = 1,
 		revealObjects = { "BrokenCar_03" },
-		revealButtons = {},
+		revealButtons = { "BuildButton_Garden" },
 	},
 }
 
@@ -444,13 +453,8 @@ local function getButtonIncomeMultiplier(button)
 	return 1
 end
 
-local function formatNumber(value)
-	local roundedValue = math.round(value * 10) / 10
-	if roundedValue % 1 == 0 then
-		return string.format("%d", math.floor(roundedValue))
-	end
-
-	return string.format("%.1f", roundedValue)
+local function formatWholeNumber(value)
+	return string.format("%d", math.floor(value))
 end
 
 local function formatButtonBuildCost(cost)
@@ -535,15 +539,15 @@ local function updateButtonLabelText(button)
 			if partsPerSecond > 0 then
 				production.Visible = true
 				if partsPerSecond % 1 == 0 then
-					production.Text = string.format("Produces: +%d Part/sec", partsPerSecond)
+					production.Text = string.format("Production: +%d parts/sec", partsPerSecond)
 				else
-					production.Text = string.format("Produces: +%.2f Part/sec", partsPerSecond)
+					production.Text = string.format("Production: +%.2f parts/sec", partsPerSecond)
 				end
 			else
 				local incomeMultiplier = getButtonIncomeMultiplier(button)
 				production.Visible = incomeMultiplier > 1
 				if incomeMultiplier > 1 then
-					production.Text = string.format("Production: x%.1f Parts", incomeMultiplier)
+					production.Text = string.format("Production: x%.1f parts", incomeMultiplier)
 				end
 			end
 		end
@@ -850,7 +854,8 @@ local function updateButtonAffordability()
 	for _, step in buildSteps do
 		local button = buttonsByName[step.buttonName]
 		if button and not purchasedButtons[step.buttonName] then
-			if partsValue >= step.cost then
+			local cost = button:GetAttribute("BuildCost") or step.cost
+			if partsValue >= cost then
 				setButtonColor(button, BUTTON_COLORS.CanAfford)
 			else
 				setButtonColor(button, BUTTON_COLORS.CannotAfford)
@@ -922,12 +927,12 @@ local function purchaseBuildStep(player, step)
 
 	local cost = button:GetAttribute("BuildCost") or step.cost
 	if parts.Value < cost then
-		debugLog(string.format("touch unaffordable: %s touched %s with %s Parts; needs %s", player.Name, step.buttonName, formatNumber(parts.Value), formatNumber(cost)))
+		debugLog(string.format("touch unaffordable: %s touched %s with %s Parts; needs %s", player.Name, step.buttonName, formatWholeNumber(parts.Value), formatWholeNumber(cost)))
 		updateButtonAffordability()
 		return
 	end
 
-	debugLog(string.format("purchase success: %s bought %s for %s Parts", player.Name, step.buttonName, formatNumber(cost)))
+	debugLog(string.format("purchase success: %s bought %s for %s Parts", player.Name, step.buttonName, formatWholeNumber(cost)))
 	parts.Value -= cost
 	hidePurchasedButton(button, step.buttonName)
 
@@ -994,6 +999,7 @@ local function setupBuildButton(step)
 	if step.clearProductionAttributes then
 		button:SetAttribute("ProducesPartsPerSecond", nil)
 		button:SetAttribute("PartsPerSecond", nil)
+		button:SetAttribute(CurrencyConfig.PartsIncomeMultiplierAttribute, nil)
 	end
 	if step.incomeMultiplier then
 		button:SetAttribute(CurrencyConfig.PartsIncomeMultiplierAttribute, step.incomeMultiplier)
@@ -1243,6 +1249,7 @@ local function hideInitialScrapyardObjects()
 	hideInitialObject("BrokenCar_02")
 	hideInitialObject("BrokenCar_03")
 	hideInitialObject("Workbench")
+	hideInitialObject("GardenSlab")
 end
 
 local function watchPlayerParts(player)

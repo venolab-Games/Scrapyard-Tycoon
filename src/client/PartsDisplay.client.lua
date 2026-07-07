@@ -66,18 +66,13 @@ rateLabel.TextSize = 14
 rateLabel.TextXAlignment = Enum.TextXAlignment.Left
 rateLabel.Parent = partsRow
 
-local function formatNumber(value)
-	local roundedValue = math.round(value * 10) / 10
-	if roundedValue % 1 == 0 then
-		return string.format("%d", math.floor(roundedValue))
-	end
-
-	return string.format("%.1f", roundedValue)
+local function formatWholeNumber(value)
+	return string.format("%d", math.floor(value))
 end
 
 local function bindPartsValue(parts)
 	local function updateAmount()
-		amountLabel.Text = string.format("Parts: %s", formatNumber(parts.Value))
+		amountLabel.Text = string.format("Parts: %s", formatWholeNumber(parts.Value))
 	end
 
 	updateAmount()
@@ -91,7 +86,7 @@ local function bindIncomeRate()
 			rate = 0
 		end
 
-		rateLabel.Text = string.format("%s parts/sec", formatNumber(rate))
+		rateLabel.Text = string.format("%s parts/sec", formatWholeNumber(rate))
 	end
 
 	updateRate()
