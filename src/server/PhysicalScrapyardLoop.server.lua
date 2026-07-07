@@ -983,6 +983,20 @@ local function connectButtonTouch(button, touchPart, step)
 	end)
 end
 
+local function warnStudioAttributeMismatch(button, attributeName, expectedValue)
+	local actualValue = button:GetAttribute(attributeName)
+	if actualValue ~= nil and actualValue ~= expectedValue then
+		warn(string.format(
+			"%s %s has %s=%s; expected %s. Update this attribute manually in Studio if the player-facing value should match the current config.",
+			DEBUG_PREFIX,
+			button:GetFullName(),
+			attributeName,
+			tostring(actualValue),
+			tostring(expectedValue)
+		))
+	end
+end
+
 local function setupBuildButton(step)
 	local button = getBuildButton(step.buttonName, step.buttonFolder)
 	if not button then
@@ -995,6 +1009,10 @@ local function setupBuildButton(step)
 	end
 	if step.displayName and button:GetAttribute("DisplayName") == nil then
 		button:SetAttribute("DisplayName", step.displayName)
+	end
+	if step.buttonName == "BuildButton_Garden" then
+		warnStudioAttributeMismatch(button, "BuildCost", step.cost)
+		warnStudioAttributeMismatch(button, "DisplayName", step.displayName)
 	end
 	if step.clearProductionAttributes then
 		button:SetAttribute("ProducesPartsPerSecond", nil)
