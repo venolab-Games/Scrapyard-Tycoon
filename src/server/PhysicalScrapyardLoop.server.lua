@@ -22,6 +22,8 @@ local BUTTON_LABEL_SIGN_TAG = "BuildButtonLabelSign"
 local LEGACY_BUTTON_LABEL_ANCHOR_NAME = "BuildButtonLabelAnchor"
 local REMOTES_FOLDER_NAME = "Remotes"
 local INSUFFICIENT_PARTS_REMOTE_NAME = "ShowInsufficientPartsFeedback"
+local SCRAPYARD_LOOKUP_WAIT_SECONDS = 5
+local PATHS_FOLDER_NAME = "Paths"
 local buttonLabelConnections = {}
 
 local buildSteps = {
@@ -30,8 +32,8 @@ local buildSteps = {
 		buttonFolder = "BuildButtons",
 		displayName = "Unlock Scrapyard",
 		cost = 10,
-		revealObjects = { "Fence" },
-		revealButtons = { "BuildButton_BrokenCar_01", "BuildButton_Workbench" },
+		revealObjects = { "ScrapyardFence_01", "ScrapyardPath_01", "ScrapyardPath_02", "ScrapyardPath_03" },
+		revealButtons = { "BuildButton_BrokenCar_01" },
 	},
 	{
 		buttonName = "BuildButton_ExpandScrapyard",
@@ -40,8 +42,26 @@ local buildSteps = {
 		displayName = "Expand Scrapyard",
 		cost = 150,
 		clearProductionAttributes = true,
-		revealObjects = { "ScrapyardSlab_02" },
-		revealButtons = {},
+		revealObjects = { "ScrapyardSlab_02", "ScrapyardFence_02", "ScrapyardPath_04", "ScrapyardPath_05" },
+		hideDescendants = {
+			{
+				objectName = "ScrapyardFence_01",
+				descendantNames = {
+					"FenceBeam_05",
+					"FenceBeam_06",
+					"FenceBeam_07",
+					"FenceBeam_08",
+					"FenceBeam_09",
+					"FenceBeam_10",
+					"FencePost_07",
+					"FencePost_08",
+					"FencePost_09",
+					"FencePost_10",
+					"FencePost_11",
+				},
+			},
+		},
+		revealButtons = { "BuildButton_BrokenCar_04" },
 	},
 	{
 		buttonName = "BuildButton_Workbench",
@@ -60,7 +80,7 @@ local buildSteps = {
 		cost = 15,
 		producesPartsPerSecond = 1,
 		revealObjects = { "BrokenCar_01" },
-		revealButtons = { "BuildButton_BrokenCar_02" },
+		revealButtons = { "BuildButton_BrokenCar_02", "BuildButton_Workbench" },
 	},
 	{
 		buttonName = "BuildButton_BrokenCar_02",
@@ -80,9 +100,46 @@ local buildSteps = {
 		revealObjects = { "BrokenCar_03" },
 		revealButtons = { "BuildButton_ExpandScrapyard" },
 	},
+	{
+		buttonName = "BuildButton_BrokenCar_04",
+		buttonFolder = "HiddenButtons",
+		displayName = "Broken Car",
+		cost = 200,
+		producesPartsPerSecond = 2,
+		revealObjects = { "BrokenCar_04" },
+		revealButtons = { "BuildButton_BrokenCar_05" },
+	},
+	{
+		buttonName = "BuildButton_BrokenCar_05",
+		buttonFolder = "HiddenButtons",
+		displayName = "Broken Car",
+		cost = 300,
+		producesPartsPerSecond = 2,
+		revealObjects = { "BrokenCar_05" },
+		revealButtons = { "BuildButton_BrokenCar_06" },
+	},
+	{
+		buttonName = "BuildButton_BrokenCar_06",
+		buttonFolder = "HiddenButtons",
+		displayName = "Broken Car",
+		cost = 450,
+		producesPartsPerSecond = 2,
+		revealObjects = { "BrokenCar_06" },
+		revealButtons = { "BuildButton_BrokenCar_07" },
+	},
+	{
+		buttonName = "BuildButton_BrokenCar_07",
+		buttonFolder = "HiddenButtons",
+		displayName = "Broken Car",
+		cost = 650,
+		producesPartsPerSecond = 2,
+		revealObjects = { "BrokenCar_07" },
+		revealButtons = {},
+	},
 }
 
 local revealObjectAliases = {
+	ScrapyardFence_01 = { "Fence" },
 	ScrapyardSlab_02 = { "GardenSlab" },
 }
 
@@ -94,11 +151,11 @@ local activePartsValue = nil
 local lastClickByPlayer = {}
 local taggedButtonsByName = {}
 
-local scrapyard = Workspace:FindFirstChild("Scrapyard")
-local buildButtons = scrapyard and scrapyard:FindFirstChild("BuildButtons")
-local hiddenButtons = scrapyard and scrapyard:FindFirstChild("HiddenButtons")
-local unlockObjects = scrapyard and scrapyard:FindFirstChild("UnlockObjects")
-local brokenCars = unlockObjects and unlockObjects:FindFirstChild("BrokenCars")
+local scrapyard = Workspace:FindFirstChild("Scrapyard") or Workspace:WaitForChild("Scrapyard", SCRAPYARD_LOOKUP_WAIT_SECONDS)
+local buildButtons = scrapyard and (scrapyard:FindFirstChild("BuildButtons") or scrapyard:WaitForChild("BuildButtons", SCRAPYARD_LOOKUP_WAIT_SECONDS))
+local hiddenButtons = scrapyard and (scrapyard:FindFirstChild("HiddenButtons") or scrapyard:WaitForChild("HiddenButtons", SCRAPYARD_LOOKUP_WAIT_SECONDS))
+local unlockObjects = scrapyard and (scrapyard:FindFirstChild("UnlockObjects") or scrapyard:WaitForChild("UnlockObjects", SCRAPYARD_LOOKUP_WAIT_SECONDS))
+local brokenCars = unlockObjects and (unlockObjects:FindFirstChild("BrokenCars") or unlockObjects:WaitForChild("BrokenCars", SCRAPYARD_LOOKUP_WAIT_SECONDS))
 local remotesFolder = ReplicatedStorage:FindFirstChild(REMOTES_FOLDER_NAME)
 if remotesFolder and not remotesFolder:IsA("Folder") then
 	warn(string.format("%s ReplicatedStorage.%s exists but is not a Folder; insufficient Parts feedback remote will be created in ReplicatedStorage", DEBUG_PREFIX, REMOTES_FOLDER_NAME))
@@ -264,6 +321,58 @@ local function findAncestorByName(instance, name)
 	return nil
 end
 
+local function refreshScrapyardReferences()
+	if not scrapyard or not scrapyard.Parent then
+		scrapyard = Workspace:FindFirstChild("Scrapyard") or Workspace:WaitForChild("Scrapyard", SCRAPYARD_LOOKUP_WAIT_SECONDS)
+	end
+
+	if scrapyard then
+		if not buildButtons or not buildButtons.Parent then
+			buildButtons = scrapyard:FindFirstChild("BuildButtons") or scrapyard:WaitForChild("BuildButtons", SCRAPYARD_LOOKUP_WAIT_SECONDS)
+		end
+		if not hiddenButtons or not hiddenButtons.Parent then
+			hiddenButtons = scrapyard:FindFirstChild("HiddenButtons") or scrapyard:WaitForChild("HiddenButtons", SCRAPYARD_LOOKUP_WAIT_SECONDS)
+		end
+		if not unlockObjects or not unlockObjects.Parent then
+			unlockObjects = scrapyard:FindFirstChild("UnlockObjects") or scrapyard:WaitForChild("UnlockObjects", SCRAPYARD_LOOKUP_WAIT_SECONDS)
+		end
+	end
+
+	if unlockObjects and (not brokenCars or not brokenCars.Parent) then
+		brokenCars = unlockObjects:FindFirstChild("BrokenCars") or unlockObjects:WaitForChild("BrokenCars", SCRAPYARD_LOOKUP_WAIT_SECONDS)
+	end
+end
+
+local function getCurrentUnlockObjects()
+	refreshScrapyardReferences()
+	return unlockObjects
+end
+
+local function getPathsFolder()
+	local currentUnlockObjects = getCurrentUnlockObjects()
+	if not currentUnlockObjects then
+		return nil
+	end
+
+	return currentUnlockObjects:FindFirstChild(PATHS_FOLDER_NAME) or currentUnlockObjects:WaitForChild(PATHS_FOLDER_NAME, SCRAPYARD_LOOKUP_WAIT_SECONDS)
+end
+
+local function findUnlockObjectMatches(objectName)
+	local matches = {}
+	local currentUnlockObjects = getCurrentUnlockObjects()
+	if not currentUnlockObjects then
+		return matches
+	end
+
+	for _, descendant in currentUnlockObjects:GetDescendants() do
+		if descendant.Name == objectName then
+			table.insert(matches, descendant)
+		end
+	end
+
+	return matches
+end
+
 local function getBuildButton(buttonName, buttonFolder)
 	local button = taggedButtonsByName[buttonName]
 	if button then
@@ -290,17 +399,104 @@ local function getBuildButton(buttonName, buttonFolder)
 end
 
 local function getRevealObject(objectName)
-	if objectName == "Fence" then
-		return unlockObjects and unlockObjects:FindFirstChild(objectName)
-	end
+	refreshScrapyardReferences()
 
 	if objectName:match("^BrokenCar_") then
-		return brokenCars and brokenCars:FindFirstChild(objectName)
+		local brokenCar = brokenCars and brokenCars:FindFirstChild(objectName)
+		if brokenCar then
+			return brokenCar
+		end
+
+		local misplacedBrokenCar = unlockObjects and unlockObjects:FindFirstChild(objectName)
+		if misplacedBrokenCar then
+			warn(string.format(
+				"%s Found %s directly under %s. Move it into Workspace > Scrapyard > UnlockObjects > BrokenCars in Studio so collector income can track it reliably.",
+				DEBUG_PREFIX,
+				objectName,
+				unlockObjects:GetFullName()
+			))
+			return misplacedBrokenCar
+		end
+
+		return nil
 	end
 
-	local object = unlockObjects and unlockObjects:FindFirstChild(objectName)
-	if object then
-		return object
+	local matches = findUnlockObjectMatches(objectName)
+
+	if objectName:match("^ScrapyardPath_") then
+		if #matches == 1 then
+			return matches[1]
+		elseif #matches == 0 then
+			local pathsFolder = getPathsFolder()
+			local childNames = {}
+			if pathsFolder then
+				for _, child in pathsFolder:GetChildren() do
+					table.insert(childNames, string.format("%s (%s)", child.Name, child.ClassName))
+				end
+			end
+
+			warn(string.format(
+				"%s Missing expected ScrapyardPath %s under Workspace > Scrapyard > UnlockObjects. Children currently under Workspace > Scrapyard > UnlockObjects > Paths: %s",
+				DEBUG_PREFIX,
+				objectName,
+				#childNames > 0 and table.concat(childNames, ", ") or "(none or Paths folder missing)"
+			))
+			return nil
+		else
+			local fullPaths = {}
+			for _, match in matches do
+				table.insert(fullPaths, match:GetFullName())
+			end
+			warn(string.format(
+				"%s Expected unique ScrapyardPath %s but found %d matches under Workspace > Scrapyard > UnlockObjects; refusing to guess. Matches: %s",
+				DEBUG_PREFIX,
+				objectName,
+				#matches,
+				table.concat(fullPaths, " | ")
+			))
+			return nil
+		end
+	end
+
+	if #matches == 1 then
+		return matches[1]
+	elseif #matches > 1 then
+		warn(string.format(
+			"%s Expected unique unlock object %s but found %d matches under %s; fix duplicates in Studio before progression can safely hide/reveal it",
+			DEBUG_PREFIX,
+			objectName,
+			#matches,
+			unlockObjects and unlockObjects:GetFullName() or "nil"
+		))
+		return nil
+	end
+
+	local misplacedMatches = {}
+	if scrapyard then
+		for _, descendant in scrapyard:GetDescendants() do
+			if descendant.Name == objectName and (not unlockObjects or not descendant:IsDescendantOf(unlockObjects)) then
+				table.insert(misplacedMatches, descendant)
+			end
+		end
+	end
+
+	if #misplacedMatches == 1 then
+		warn(string.format(
+			"%s Found %s outside Workspace > Scrapyard > UnlockObjects at %s; move it to %s when convenient",
+			DEBUG_PREFIX,
+			objectName,
+			misplacedMatches[1]:GetFullName(),
+			"Workspace > Scrapyard > UnlockObjects"
+		))
+		return misplacedMatches[1]
+	elseif #misplacedMatches > 1 then
+		warn(string.format(
+			"%s Expected unique unlock object %s but found %d misplaced matches under Workspace.Scrapyard; fix duplicates in Studio before progression can safely hide/reveal it",
+			DEBUG_PREFIX,
+			objectName,
+			#misplacedMatches
+		))
+		return nil
 	end
 
 	for _, alias in revealObjectAliases[objectName] or {} do
@@ -318,6 +514,197 @@ local function getRevealObject(objectName)
 	end
 
 	return nil
+end
+
+local function getExpectedUnlockPath(objectName)
+	if objectName:match("^BrokenCar_") then
+		return string.format("Workspace > Scrapyard > UnlockObjects > BrokenCars > %s", objectName)
+	end
+
+	if objectName:match("^ScrapyardPath_") then
+		return string.format("Workspace > Scrapyard > UnlockObjects > Paths > %s or Workspace > Scrapyard > UnlockObjects > %s", objectName, objectName)
+	end
+
+	if objectName:match("^ScrapyardFence_") then
+		return string.format("Workspace > Scrapyard > UnlockObjects > Fences > %s or Workspace > Scrapyard > UnlockObjects > %s", objectName, objectName)
+	end
+
+	return string.format("Workspace > Scrapyard > UnlockObjects > %s", objectName)
+end
+
+local function countNamedDescendants(root, objectName)
+	local count = 0
+	if not root then
+		return count
+	end
+
+	for _, descendant in root:GetDescendants() do
+		if descendant.Name == objectName then
+			count += 1
+		end
+	end
+
+	return count
+end
+
+local function getScrapyardPathChildrenSummary()
+	local pathsFolder = getPathsFolder()
+	if not pathsFolder then
+		return "(Paths folder missing)"
+	end
+
+	local childNames = {}
+	for _, child in pathsFolder:GetChildren() do
+		table.insert(childNames, string.format("%s (%s)", child.Name, child.ClassName))
+	end
+
+	return #childNames > 0 and table.concat(childNames, ", ") or "(none)"
+end
+
+local function warnMissingScrapyardPath(pathName)
+	warn(string.format(
+		"%s Missing expected ScrapyardPath %s under Workspace > Scrapyard > UnlockObjects. Children currently under Workspace > Scrapyard > UnlockObjects > Paths: %s",
+		DEBUG_PREFIX,
+		pathName,
+		getScrapyardPathChildrenSummary()
+	))
+end
+
+local function warnDuplicateScrapyardPath(pathName, matches)
+	local fullPaths = {}
+	for _, match in matches do
+		table.insert(fullPaths, match:GetFullName())
+	end
+
+	warn(string.format(
+		"%s Expected unique ScrapyardPath %s but found %d matches under Workspace > Scrapyard > UnlockObjects; refusing to guess. Matches: %s",
+		DEBUG_PREFIX,
+		pathName,
+		#matches,
+		table.concat(fullPaths, " | ")
+	))
+end
+
+local function warnDuplicateExpectedObjects()
+	refreshScrapyardReferences()
+
+	for _, step in buildSteps do
+		local buttonCount = countNamedDescendants(scrapyard, step.buttonName)
+		if buttonCount > 1 then
+			warn(string.format("%s Expected unique button %s has %d matching descendants in Workspace.Scrapyard; fix duplicates in Studio", DEBUG_PREFIX, step.buttonName, buttonCount))
+		end
+
+		for _, objectName in step.revealObjects do
+			if objectName:match("^ScrapyardPath_") then
+				continue
+			end
+
+			local searchRoot = objectName:match("^BrokenCar_") and brokenCars or unlockObjects
+			local objectCount = countNamedDescendants(searchRoot, objectName)
+			if objectCount > 1 then
+				warn(string.format("%s Expected unique unlock object %s has %d matching descendants under %s; fix duplicates in Studio", DEBUG_PREFIX, objectName, objectCount, searchRoot and searchRoot:GetFullName() or "nil"))
+			end
+		end
+	end
+end
+
+local function validateUnlockObjectPlacement(objectName)
+	if objectName:match("^ScrapyardPath_") then
+		local pathMatches = findUnlockObjectMatches(objectName)
+		if #pathMatches == 0 then
+			warnMissingScrapyardPath(objectName)
+		elseif #pathMatches > 1 then
+			warnDuplicateScrapyardPath(objectName, pathMatches)
+		end
+		return
+	end
+
+	local objectCount = countNamedDescendants(unlockObjects, objectName)
+	if objectCount == 0 then
+		warnMissing(getExpectedUnlockPath(objectName))
+	elseif objectCount > 1 then
+		warn(string.format("%s Expected unique unlock object %s has %d matching descendants under %s; fix duplicates in Studio", DEBUG_PREFIX, objectName, objectCount, unlockObjects and unlockObjects:GetFullName() or "nil"))
+	end
+
+	if scrapyard then
+		for _, descendant in scrapyard:GetDescendants() do
+			if descendant.Name == objectName and unlockObjects and not descendant:IsDescendantOf(unlockObjects) then
+				warn(string.format(
+					"%s %s is outside Workspace > Scrapyard > UnlockObjects; move it there so progression visibility can manage it",
+					DEBUG_PREFIX,
+					descendant:GetFullName()
+				))
+			end
+		end
+	end
+end
+
+local function validateScrapyardLayoutObjectPlacement()
+	for _, objectName in { "ScrapyardFence_01", "ScrapyardFence_02", "ScrapyardSlab_02", "ScrapyardSlab_03", "ScrapyardSlab_04" } do
+		validateUnlockObjectPlacement(objectName)
+	end
+
+	for index = 1, 5 do
+		validateUnlockObjectPlacement(string.format("ScrapyardPath_%02d", index))
+	end
+end
+
+local function getOriginalBoolean(instance, attributeName, fallback)
+	local originalValue = instance:GetAttribute(attributeName)
+	if typeof(originalValue) == "boolean" then
+		return originalValue
+	end
+
+	return fallback
+end
+
+local function getOriginalNumber(instance, attributeName, fallback)
+	local originalValue = instance:GetAttribute(attributeName)
+	if typeof(originalValue) == "number" then
+		return originalValue
+	end
+
+	return fallback
+end
+
+local function validateExpansionBrokenCarButtonSetup()
+	for index = 4, 7 do
+		local buttonName = string.format("BuildButton_BrokenCar_%02d", index)
+		local button = getExpectedButton(buttonName)
+		if not button then
+			warnMissing(string.format("Workspace > Scrapyard > HiddenButtons > %s", buttonName))
+			continue
+		end
+
+		if not CollectionService:HasTag(button, "Button") then
+			warn(string.format("%s %s must have exact CollectionService tag Button", DEBUG_PREFIX, button:GetFullName()))
+		end
+
+		local buttonPart = findDescendantByName(button, "ButtonPart")
+		if not buttonPart or not buttonPart:IsA("BasePart") then
+			warn(string.format("%s %s must contain a BasePart named ButtonPart for touch purchasing", DEBUG_PREFIX, button:GetFullName()))
+		end
+
+		local displayName = button:GetAttribute("DisplayName")
+		if typeof(displayName) == "string" and displayName ~= "" and displayName ~= "Broken Car" then
+			warn(string.format(
+				"%s %s has DisplayName=%s; expected Broken Car. If expansion buttons appear out of order, verify this Studio model is the numbered %s object.",
+				DEBUG_PREFIX,
+				button:GetFullName(),
+				displayName,
+				buttonName
+			))
+		end
+
+		if button:GetAttribute("BuildCost") == nil then
+			warn(string.format("%s %s missing BuildCost; prototype default will be seeded by setup", DEBUG_PREFIX, button:GetFullName()))
+		end
+
+		local sign = button:FindFirstChild(BUTTON_LABEL_SIGN_NAME)
+		if sign and not sign:IsA("BasePart") then
+			warn(string.format("%s %s has %s but it is not a BasePart", DEBUG_PREFIX, button:GetFullName(), BUTTON_LABEL_SIGN_NAME))
+		end
+	end
 end
 
 local function eachSelfAndDescendant(instance, callback)
@@ -377,16 +764,16 @@ local function setObjectHidden(object, hidden, options)
 				instance.CanTouch = false
 				instance.CanQuery = false
 			else
-				instance.Transparency = 0
+				instance.Transparency = getOriginalNumber(instance, "OriginalTransparency", instance.Transparency)
 				instance.LocalTransparencyModifier = 0
-				instance.CanCollide = true
-				instance.CanTouch = true
-				instance.CanQuery = true
+				instance.CanCollide = getOriginalBoolean(instance, "OriginalCanCollide", instance.CanCollide)
+				instance.CanTouch = getOriginalBoolean(instance, "OriginalCanTouch", instance.CanTouch)
+				instance.CanQuery = getOriginalBoolean(instance, "OriginalCanQuery", instance.CanQuery)
 			end
 		elseif instance:IsA("Decal") or instance:IsA("Texture") then
-			instance.Transparency = hidden and 1 or 0
+			instance.Transparency = hidden and 1 or getOriginalNumber(instance, "OriginalTransparency", instance.Transparency)
 		elseif instance:IsA("SurfaceGui") or instance:IsA("BillboardGui") then
-			instance.Enabled = hidden and false or true
+			instance.Enabled = hidden and false or (instance:GetAttribute("OriginalEnabled") ~= false)
 		elseif instance:IsA("ProximityPrompt") then
 			instance.Enabled = false
 		elseif instance:IsA("ClickDetector") then
@@ -965,12 +1352,8 @@ local function revealObject(objectName)
 
 	local object = getRevealObject(objectName)
 	if not object then
-		if objectName == "Fence" then
-			warnMissing(string.format("Workspace > Scrapyard > UnlockObjects > %s", objectName))
-		elseif objectName:match("^BrokenCar_") then
-			warnMissing(string.format("Workspace > Scrapyard > UnlockObjects > BrokenCars > %s", objectName))
-		else
-			warnMissing(string.format("Workspace > Scrapyard > UnlockObjects > %s", objectName))
+		if not objectName:match("^ScrapyardPath_") then
+			warnMissing(getExpectedUnlockPath(objectName))
 		end
 		return
 	end
@@ -983,7 +1366,7 @@ local function revealObject(objectName)
 		debugLog(string.format("%s marked CollectorActive for Parts collector income", objectName))
 	end
 
-	if objectName == "Fence" then
+	if objectName == "ScrapyardFence_01" then
 		logVisibilitySample(objectName, object)
 	end
 end
@@ -1010,6 +1393,26 @@ local function hidePurchasedButton(button, buttonName)
 	setButtonColor(button, BUTTON_COLORS.Purchased)
 	setObjectHidden(button, true)
 	updateButtonLabelVisibility(button)
+end
+
+local function hideNamedUnlockDescendants(step)
+	for _, hideConfig in step.hideDescendants or {} do
+		local object = getRevealObject(hideConfig.objectName)
+		if not object then
+			warnMissing(getExpectedUnlockPath(hideConfig.objectName))
+			continue
+		end
+
+		for _, descendantName in hideConfig.descendantNames or {} do
+			local descendant = findDescendantByName(object, descendantName)
+			if descendant then
+				local processed = setObjectHidden(descendant, true)
+				debugLog(string.format("hid %s descendant %s; processed %d descendants", hideConfig.objectName, descendantName, processed))
+			else
+				warn(string.format("%s Missing expansion opening piece %s under %s", DEBUG_PREFIX, descendantName, object:GetFullName()))
+			end
+		end
+	end
 end
 
 local function showInsufficientPartsFeedback(player, failedCost)
@@ -1047,6 +1450,8 @@ local function purchaseBuildStep(player, step)
 	for _, objectName in step.revealObjects do
 		revealObject(objectName)
 	end
+
+	hideNamedUnlockDescendants(step)
 
 	for _, buttonName in step.revealButtons do
 		revealButton(buttonName)
@@ -1105,6 +1510,29 @@ local function warnStudioAttributeMismatch(button, attributeName, expectedValue)
 	end
 end
 
+local function isBrokenCarButtonName(buttonName)
+	return buttonName:match("^BuildButton_BrokenCar_") ~= nil
+end
+
+local function normalizeBrokenCarDisplayName(button, step)
+	if not isBrokenCarButtonName(step.buttonName) then
+		return
+	end
+
+	local displayName = button:GetAttribute("DisplayName")
+	if displayName ~= "Broken Car" then
+		if displayName ~= nil then
+			warn(string.format(
+				"%s %s has BrokenCar DisplayName=%s; updating button panel label to Broken Car per progression naming rule.",
+				DEBUG_PREFIX,
+				button:GetFullName(),
+				tostring(displayName)
+			))
+		end
+		button:SetAttribute("DisplayName", "Broken Car")
+	end
+end
+
 local function updateLegacyExpansionDisplayName(button, step)
 	local displayName = button:GetAttribute("DisplayName")
 	if displayName == "Unlock Garden" then
@@ -1129,8 +1557,9 @@ local function setupBuildButton(step)
 		button:SetAttribute("BuildCost", step.cost)
 	end
 	if step.displayName and button:GetAttribute("DisplayName") == nil then
-		button:SetAttribute("DisplayName", step.displayName)
+		button:SetAttribute("DisplayName", isBrokenCarButtonName(step.buttonName) and "Broken Car" or step.displayName)
 	end
+	normalizeBrokenCarDisplayName(button, step)
 	if step.buttonName == "BuildButton_ExpandScrapyard" then
 		updateLegacyExpansionDisplayName(button, step)
 		warnStudioAttributeMismatch(button, "BuildCost", step.cost)
@@ -1332,12 +1761,8 @@ end
 local function hideInitialObject(objectName)
 	local object = getRevealObject(objectName)
 	if not object then
-		if objectName == "Fence" then
-			warnMissing(string.format("Workspace > Scrapyard > UnlockObjects > %s", objectName))
-		elseif objectName:match("^BrokenCar_") then
-			warnMissing(string.format("Workspace > Scrapyard > UnlockObjects > BrokenCars > %s", objectName))
-		else
-			warnMissing(string.format("Workspace > Scrapyard > UnlockObjects > %s", objectName))
+		if not objectName:match("^ScrapyardPath_") then
+			warnMissing(getExpectedUnlockPath(objectName))
 		end
 		return
 	end
@@ -1352,8 +1777,14 @@ end
 local function hideInitialButton(buttonName)
 	local button = buttonsByName[buttonName]
 	if not button then
-		warnMissing(string.format("Workspace > Scrapyard > HiddenButtons > %s", buttonName))
-		return
+		local step = findBuildStep(buttonName)
+		button = step and getExpectedButtonForStep(step)
+		if button then
+			warn(string.format("%s %s was not fully set up as a tagged build button, but will still be hidden at startup", DEBUG_PREFIX, button:GetFullName()))
+		else
+			warnMissing(string.format("Workspace > Scrapyard > HiddenButtons > %s", buttonName))
+			return
+		end
 	end
 
 	local processed = setObjectHidden(button, true)
@@ -1384,12 +1815,22 @@ local function setupBuildButtons()
 end
 
 local function hideInitialScrapyardObjects()
-	hideInitialObject("Fence")
-	hideInitialObject("BrokenCar_01")
-	hideInitialObject("BrokenCar_02")
-	hideInitialObject("BrokenCar_03")
-	hideInitialObject("Workbench")
-	hideInitialObject("ScrapyardSlab_02")
+	local hiddenObjects = {}
+	for _, step in buildSteps do
+		for _, objectName in step.revealObjects do
+			if not hiddenObjects[objectName] then
+				hiddenObjects[objectName] = true
+				hideInitialObject(objectName)
+			end
+		end
+	end
+
+	for _, futureObjectName in { "ScrapyardSlab_03", "ScrapyardSlab_04" } do
+		if not hiddenObjects[futureObjectName] then
+			hiddenObjects[futureObjectName] = true
+			hideInitialObject(futureObjectName)
+		end
+	end
 end
 
 local function watchPlayerParts(player)
@@ -1405,6 +1846,9 @@ local function watchPlayerParts(player)
 end
 
 scanTaggedButtons()
+warnDuplicateExpectedObjects()
+validateScrapyardLayoutObjectPlacement()
+validateExpansionBrokenCarButtonSetup()
 setupTaggedButtonLabels()
 hideInitialScrapyardObjects()
 setupBuildButtons()
