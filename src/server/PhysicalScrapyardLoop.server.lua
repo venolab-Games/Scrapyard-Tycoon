@@ -34,12 +34,13 @@ local buildSteps = {
 		revealButtons = { "BuildButton_BrokenCar_01", "BuildButton_Workbench" },
 	},
 	{
-		buttonName = "BuildButton_Garden",
+		buttonName = "BuildButton_ExpandScrapyard",
+		buttonAliases = { "BuildButton_Garden" },
 		buttonFolder = "HiddenButtons",
-		displayName = "Unlock Garden",
+		displayName = "Expand Scrapyard",
 		cost = 150,
 		clearProductionAttributes = true,
-		revealObjects = { "GardenSlab" },
+		revealObjects = { "ScrapyardSlab_02" },
 		revealButtons = {},
 	},
 	{
@@ -77,8 +78,12 @@ local buildSteps = {
 		cost = 34,
 		producesPartsPerSecond = 1,
 		revealObjects = { "BrokenCar_03" },
-		revealButtons = { "BuildButton_Garden" },
+		revealButtons = { "BuildButton_ExpandScrapyard" },
 	},
+}
+
+local revealObjectAliases = {
+	ScrapyardSlab_02 = { "GardenSlab" },
 }
 
 local buttonsByName = {}
@@ -162,6 +167,39 @@ local function getExpectedButton(buttonName)
 	return (buildButtons and buildButtons:FindFirstChild(buttonName)) or (hiddenButtons and hiddenButtons:FindFirstChild(buttonName))
 end
 
+local function findBuildStep(buttonName)
+	for _, step in buildSteps do
+		if step.buttonName == buttonName then
+			return step
+		end
+	end
+
+	return nil
+end
+
+local function getExpectedButtonForStep(step)
+	local expectedButton = getExpectedButton(step.buttonName)
+	if expectedButton then
+		return expectedButton
+	end
+
+	for _, alias in step.buttonAliases or {} do
+		local aliasButton = getExpectedButton(alias)
+		if aliasButton then
+			warn(string.format(
+				"%s Found legacy button %s for %s. Rename it in Studio to %s when convenient.",
+				DEBUG_PREFIX,
+				aliasButton:GetFullName(),
+				step.displayName or step.buttonName,
+				step.buttonName
+			))
+			return aliasButton
+		end
+	end
+
+	return nil
+end
+
 local function scanTaggedButtons()
 	local taggedButtons = CollectionService:GetTagged("Button")
 	debugLog(string.format("found %d tagged Button instances", #taggedButtons))
@@ -183,7 +221,7 @@ local function scanTaggedButtons()
 	end
 
 	for _, step in buildSteps do
-		local expectedButton = getExpectedButton(step.buttonName)
+		local expectedButton = getExpectedButtonForStep(step)
 		if not expectedButton then
 			warnMissing(string.format("Workspace > Scrapyard > %s or HiddenButtons > %s", step.buttonFolder, step.buttonName))
 		elseif not CollectionService:HasTag(expectedButton, "Button") then
@@ -232,6 +270,21 @@ local function getBuildButton(buttonName, buttonFolder)
 		return button
 	end
 
+	local step = findBuildStep(buttonName)
+	for _, alias in (step and step.buttonAliases) or {} do
+		local aliasButton = taggedButtonsByName[alias]
+		if aliasButton then
+			warn(string.format(
+				"%s Using legacy tagged Button %s for %s. Rename it in Studio to %s when convenient.",
+				DEBUG_PREFIX,
+				aliasButton:GetFullName(),
+				step.displayName or buttonName,
+				buttonName
+			))
+			return aliasButton
+		end
+	end
+
 	warn(string.format("%s Cannot set up %s because it is not tagged with exact CollectionService tag Button", DEBUG_PREFIX, buttonName))
 	return nil
 end
@@ -245,7 +298,26 @@ local function getRevealObject(objectName)
 		return brokenCars and brokenCars:FindFirstChild(objectName)
 	end
 
-	return unlockObjects and unlockObjects:FindFirstChild(objectName)
+	local object = unlockObjects and unlockObjects:FindFirstChild(objectName)
+	if object then
+		return object
+	end
+
+	for _, alias in revealObjectAliases[objectName] or {} do
+		local aliasObject = unlockObjects and unlockObjects:FindFirstChild(alias)
+		if aliasObject then
+			warn(string.format(
+				"%s Found legacy unlock object %s for %s. Rename it in Studio to %s when convenient.",
+				DEBUG_PREFIX,
+				aliasObject:GetFullName(),
+				objectName,
+				objectName
+			))
+			return aliasObject
+		end
+	end
+
+	return nil
 end
 
 local function eachSelfAndDescendant(instance, callback)
@@ -1033,6 +1105,19 @@ local function warnStudioAttributeMismatch(button, attributeName, expectedValue)
 	end
 end
 
+local function updateLegacyExpansionDisplayName(button, step)
+	local displayName = button:GetAttribute("DisplayName")
+	if displayName == "Unlock Garden" then
+		warn(string.format(
+			"%s %s has legacy DisplayName='Unlock Garden'; updating to %s for the scrapyard expansion rename.",
+			DEBUG_PREFIX,
+			button:GetFullName(),
+			step.displayName
+		))
+		button:SetAttribute("DisplayName", step.displayName)
+	end
+end
+
 local function setupBuildButton(step)
 	local button = getBuildButton(step.buttonName, step.buttonFolder)
 	if not button then
@@ -1046,7 +1131,8 @@ local function setupBuildButton(step)
 	if step.displayName and button:GetAttribute("DisplayName") == nil then
 		button:SetAttribute("DisplayName", step.displayName)
 	end
-	if step.buttonName == "BuildButton_Garden" then
+	if step.buttonName == "BuildButton_ExpandScrapyard" then
+		updateLegacyExpansionDisplayName(button, step)
 		warnStudioAttributeMismatch(button, "BuildCost", step.cost)
 		warnStudioAttributeMismatch(button, "DisplayName", step.displayName)
 	end
@@ -1303,7 +1389,7 @@ local function hideInitialScrapyardObjects()
 	hideInitialObject("BrokenCar_02")
 	hideInitialObject("BrokenCar_03")
 	hideInitialObject("Workbench")
-	hideInitialObject("GardenSlab")
+	hideInitialObject("ScrapyardSlab_02")
 end
 
 local function watchPlayerParts(player)

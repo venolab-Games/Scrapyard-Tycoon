@@ -1,6 +1,6 @@
-# roblox-vehicle-tycoon
+# Scrapyard Tycoon
 
-A small Roblox tycoon prototype about building up an old scrapyard one unlock at a time.
+Scrapyard Tycoon is a small Roblox tycoon prototype about building up an old scrapyard one unlock at a time.
 
 The current goal is not to build a giant finished tycoon yet. The goal is to make a tiny playable loop that works, feels readable, and can grow without becoming messy too early.
 
@@ -26,8 +26,8 @@ The current goal is not to build a giant finished tycoon yet. The goal is to mak
 * Whole-number Parts display
 * Live parts/sec display in the top-left UI
 * Workbench unlock with x1.5 Parts income boost
-* Garden unlock after Broken Car 3
-* GardenSlab reveal when Unlock Garden is purchased
+* Scrapyard expansion unlock after Broken Car 3
+* ScrapyardSlab_02 reveal when Expand Scrapyard is purchased
 * Parts as the only visible leaderstat
 * Hidden internal ScrapyardLevel value for progression logic
 
@@ -36,7 +36,7 @@ The current goal is not to build a giant finished tycoon yet. The goal is to mak
 * Scrapyard
 * Broken Cars
 * Workbench
-* GardenSlab
+* ScrapyardSlab_02
 * Parts Collector
 * CollectPad
 * Build buttons

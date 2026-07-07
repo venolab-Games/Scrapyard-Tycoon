@@ -1,1 +1,1 @@
-print("[roblox-vehicle-tycoon] Rojo server sync test successful")
+print("[Scrapyard Tycoon] Rojo server sync test successful")
