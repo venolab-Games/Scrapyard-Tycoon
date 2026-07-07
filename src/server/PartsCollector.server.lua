@@ -22,6 +22,15 @@ local BROKEN_CAR_NAMES = {
 	"BrokenCar_06",
 	"BrokenCar_07",
 }
+local BROKEN_CAR_PARTS_PER_TICK = {
+	BrokenCar_01 = 1,
+	BrokenCar_02 = 1,
+	BrokenCar_03 = 1,
+	BrokenCar_04 = 2,
+	BrokenCar_05 = 2,
+	BrokenCar_06 = 2,
+	BrokenCar_07 = 2,
+}
 
 local collectDebounces = {}
 local counterValueLabels = {}
@@ -288,23 +297,28 @@ local function getScrapyardIncomeMultiplier()
 	return 1
 end
 
-local function getActiveBrokenCarCount()
-	local count = 0
-	for _, active in activeBrokenCarLoops do
-		if active then
-			count += 1
-		end
+local function getBrokenCarBasePartsPerTick(brokenCar)
+	local configuredPartsPerTick = BROKEN_CAR_PARTS_PER_TICK[brokenCar.Name]
+	if typeof(configuredPartsPerTick) == "number" and configuredPartsPerTick > 0 then
+		return configuredPartsPerTick
 	end
 
-	return count
+	return BROKEN_CAR_BASE_PARTS_PER_TICK
 end
 
 local function getEffectivePartsIncomeRate()
-	return math.floor(getActiveBrokenCarCount() * BROKEN_CAR_BASE_PARTS_PER_TICK * getScrapyardIncomeMultiplier())
+	local rawRate = 0
+	for brokenCar, active in activeBrokenCarLoops do
+		if active then
+			rawRate += getBrokenCarBasePartsPerTick(brokenCar)
+		end
+	end
+
+	return math.floor(rawRate * getScrapyardIncomeMultiplier())
 end
 
 local function getBrokenCarPartsForTick(brokenCar)
-	local rawParts = (brokenCarRemainders[brokenCar] or 0) + (BROKEN_CAR_BASE_PARTS_PER_TICK * getScrapyardIncomeMultiplier())
+	local rawParts = (brokenCarRemainders[brokenCar] or 0) + (getBrokenCarBasePartsPerTick(brokenCar) * getScrapyardIncomeMultiplier())
 	local wholeParts = math.floor(rawParts)
 	brokenCarRemainders[brokenCar] = rawParts - wholeParts
 
@@ -357,7 +371,7 @@ local function startBrokenCarIncomeLoop(collector, brokenCar)
 	end
 
 	activeBrokenCarLoops[brokenCar] = true
-	log(string.format("%s started +1/sec StoredParts loop for %s", collector.Name, brokenCar.Name))
+	log(string.format("%s started +%s/sec StoredParts loop for %s", collector.Name, formatWholeNumber(getBrokenCarBasePartsPerTick(brokenCar)), brokenCar.Name))
 	updatePlayerIncomeRates()
 
 	task.spawn(function()
