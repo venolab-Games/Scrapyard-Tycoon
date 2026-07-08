@@ -1,49 +1,32 @@
-# Release Automation
+# Release Notes Preview
 
-This repository has an automated GitHub release workflow for early prototype releases.
+This repository uses a simple manual release-notes preview system.
 
 The active files are:
 
 - `.github/workflows/release.yml`
 - `scripts/generate_release.py`
 
-The project is currently in the alpha phase, so future automated releases use prerelease tags like `v0.0.0-alpha.1`, `v0.0.0-alpha.2`, and `v0.0.0-alpha.3`.
-
-Existing normal tags such as `v0.1.0` and `v0.2.0` can remain as early automation test releases. They do not control the next alpha number.
+Manual tags and manually created GitHub releases are the source of truth. The preview system never creates tags, never publishes GitHub releases, and never bumps version numbers.
 
 ## Purpose
 
-The release automation turns commit history into readable GitHub release notes and alpha prerelease tags.
+The preview turns commit history into readable release-note text before a maintainer creates a release manually.
 
 It is designed to:
 
-- Read commits since the latest alpha tag.
-- Fall back to the latest normal version tag only when no alpha tag exists yet.
-- Create the next `v0.0.0-alpha.N` tag.
-- Mark GitHub releases from alpha tags as prereleases.
+- Read commits since the latest reachable tag.
 - Group release notes into readable sections.
 - Link short commit hashes to exact GitHub commit pages.
+- Clearly state that the output is only a preview.
 
-It does not update `CHANGELOG.md` or README version/status sections yet.
-
-## Version Path
-
-Planned release path:
-
-- `v0.0.0-alpha.N`: early prototype iterations.
-- `v0.0.0-beta.N`: later playable beta iterations.
-- `v1.0.0`: real release after beta.
-
-Only alpha prerelease automation is implemented right now.
+It does not update `CHANGELOG.md`, README version/status sections, tags, GitHub releases, or project version numbers.
 
 ## When It Runs
 
-The workflow runs when:
+The GitHub Actions workflow only runs when a maintainer starts it manually with `workflow_dispatch`.
 
-- A commit is pushed to the `main` branch.
-- A maintainer manually starts it with `workflow_dispatch`.
-
-The workflow does not run for pull requests or other branches.
+The workflow does not run automatically on pushes, pull requests, or other branches.
 
 ## Commit Title Format
 
@@ -74,35 +57,25 @@ BREAKING CHANGE: Existing saved vehicle inventory data must be migrated.
 
 ## Supported Prefixes
 
-| Prefix | Release-note section | Alpha release behavior |
+Commit prefixes only choose the release-note section. They do not trigger releases.
+
+| Prefix | Release-note section | Automatic release behavior |
 | --- | --- | --- |
-| `feat` | New Features | Creates an alpha release |
-| `fix` | Fixes | Creates an alpha release |
-| `ci` | CI / Automation | Creates an alpha release only for material release automation changes |
-| `docs` | Documentation | No release by itself after an alpha tag exists |
-| `refactor` | Refactors | No release by itself after an alpha tag exists |
-| `chore` | Chores | No release by itself after an alpha tag exists |
-| `build` | Build | No release by itself after an alpha tag exists |
-| `test` | Tests | No release by itself after an alpha tag exists |
-| Unknown prefixes | Other Changes | No release by itself after an alpha tag exists |
+| `feat` | New Features | Never creates a release |
+| `fix` | Fixes | Never creates a release |
+| `ci` | CI / Automation | Never creates a release |
+| `docs` | Documentation | Never creates a release |
+| `refactor` | Refactors | Never creates a release |
+| `chore` | Chores | Never creates a release |
+| `build` | Build | Never creates a release |
+| `test` | Tests | Never creates a release |
+| Unknown prefixes | Other Changes | Never creates a release |
 
-Balance, config, and prototype tuning should usually use `chore:` so those changes do not create releases by themselves.
-
-## Alpha Version Rules
-
-The automation uses alpha prerelease numbering during the prototype phase.
-
-- If no alpha tags exist, the next alpha release is `v0.0.0-alpha.1`.
-- If `v0.0.0-alpha.1` exists, the next alpha release is `v0.0.0-alpha.2`.
-- Existing normal tags such as `v0.1.0`, `v0.2.0`, or `v0.3.0` do not make the next alpha release become `v0.3.0`.
-- `feat:` creates a new alpha release.
-- `fix:` creates a new alpha release.
-- `ci:` creates a release only when the title or description indicates material release/version/tag automation work.
-- Only `docs:`, `chore:`, `refactor:`, `build:`, `test:`, or unknown commits do not create a new release when an alpha tag already exists.
+Breaking changes are marked inside their section with `[BREAKING]`, but they still do not create tags, releases, or version bumps.
 
 ## Release Note Sections
 
-Generated GitHub release notes can include:
+Generated release notes can include:
 
 - New Features
 - Fixes
@@ -114,12 +87,13 @@ Generated GitHub release notes can include:
 - Tests
 - Other Changes
 
-Breaking changes are marked inside their section with `[BREAKING]`.
-
 Example:
 
 ```markdown
-Changes since v0.0.0-alpha.1.
+Release notes preview.
+No tag, GitHub release, or version bump was created.
+
+Changes since v0.0.1.
 
 ## New Features
 
@@ -130,31 +104,43 @@ Changes since v0.0.0-alpha.1.
 - Prevent duplicate purchase prompt ([def5678](https://github.com/venolab-Games/roblox-vehicle-tycoon/commit/def5678))
 ```
 
-## Manual Trigger
+## Manual Preview Flow
 
-To manually run the release workflow:
+To run the preview locally:
+
+```powershell
+python scripts/generate_release.py --notes-file release_notes.md
+```
+
+The preview is written to `release_notes.md` and the script prints metadata including:
+
+- `release_needed=false`
+- `tag=`
+- `version_bump=none`
+- `compare_tag=<latest reachable tag>`
+
+To run the GitHub Actions preview:
 
 1. Open the repository on GitHub.
 2. Go to the Actions tab.
-3. Select the Release workflow.
+3. Select the Release Notes Preview workflow.
 4. Choose Run workflow.
-5. Select the `main` branch.
+5. Select the branch to preview.
 6. Start the run.
 
-Manual runs use the same rules as pushes to `main`.
+The workflow prints the preview in the run logs, adds it to the job summary, and uploads `release_notes.md` as the `release-notes-preview` artifact.
 
-## Avoiding Accidental Releases
+## Manual Release Flow
 
-To avoid unintended alpha releases:
+To create a release such as `v0.0.1`:
 
-- Use `docs:`, `chore:`, `refactor:`, `build:`, or `test:` for changes that should not release by themselves.
-- Use `chore:` for prototype balance/config tuning unless a release is intentionally needed.
-- Do not use `feat:` unless the change should create a new alpha release.
-- Do not use `fix:` unless the change should create a new alpha release.
-- Use `ci:` for release automation changes, but only material release automation changes should trigger a release.
-- Keep release-triggering commits off `main` until they are ready.
+1. Run the local or GitHub Actions preview.
+2. Review `release_notes.md`.
+3. Manually create the tag, such as `v0.0.1`, when the release is ready.
+4. Manually create the GitHub release for that tag.
+5. Paste or adapt the preview text into the GitHub release notes.
 
-The workflow is intentionally limited to `main` and manual runs.
+The preview does not create `v0.0.1`, `alpha.10`, or any other tag.
 
 ## Current File Structure
 
@@ -171,13 +157,13 @@ docs/
 
 ## Future Options
 
-These are not enabled yet:
+These are not enabled:
 
+- Automatic tag creation.
+- Automatic GitHub release publishing.
+- Automatic version bumps.
 - Updating `CHANGELOG.md`.
 - Updating README version or status sections.
-- Adding beta prerelease automation.
-- Promoting to `v1.0.0`.
-- Supporting release branches.
-- Requiring manual approval before tag and release creation.
+- Release branch management.
 
 Review the workflow before adding any of these behaviors.
