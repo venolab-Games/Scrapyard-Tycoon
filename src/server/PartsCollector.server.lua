@@ -34,10 +34,10 @@ local BROKEN_CAR_PARTS_PER_TICK = {
 	BrokenCar_05 = 2,
 	BrokenCar_06 = 2,
 	BrokenCar_07 = 2,
-	BrokenCar_08 = 2,
-	BrokenCar_09 = 2,
-	BrokenCar_10 = 2,
-	BrokenCar_11 = 2,
+	BrokenCar_08 = 3,
+	BrokenCar_09 = 3,
+	BrokenCar_10 = 3,
+	BrokenCar_11 = 3,
 }
 
 local collectDebounces = {}
