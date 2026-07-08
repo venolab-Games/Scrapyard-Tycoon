@@ -1,9 +1,19 @@
 import unittest
 
-from scripts.generate_release import Commit, build_release_notes
+from scripts.generate_release import Commit, build_release_notes, should_create_alpha_release
 
 
 class BuildReleaseNotesTests(unittest.TestCase):
+    def test_commit_titles_do_not_request_alpha_release(self):
+        commits = [
+            Commit("1" * 40, "feat: add player sprint", ""),
+            Commit("2" * 40, "fix: prevent stuck sprint speed", ""),
+            Commit("3" * 40, "ci: update release workflow", "release tag version"),
+        ]
+
+        self.assertFalse(should_create_alpha_release(commits, None))
+        self.assertFalse(should_create_alpha_release(commits, "v0.0.0-alpha.9"))
+
     def test_body_starts_with_changes_line_without_version_heading(self):
         notes = build_release_notes(
             "v0.0.0-alpha.4",

@@ -1,28 +1,27 @@
 # Release Automation
 
-This repository has an automated GitHub release workflow for early prototype releases.
+This repository has a manual GitHub release workflow for early prototype release-note previews.
 
 The active files are:
 
 - `.github/workflows/release.yml`
 - `scripts/generate_release.py`
 
-The project is currently in the alpha phase, so future automated releases use prerelease tags like `v0.0.0-alpha.1`, `v0.0.0-alpha.2`, and `v0.0.0-alpha.3`.
+The project is currently in the alpha phase, so future intentional releases may use prerelease tags like `v0.0.0-alpha.1`, `v0.0.0-alpha.2`, and `v0.0.0-alpha.3`.
 
 Existing normal tags such as `v0.1.0` and `v0.2.0` can remain as early automation test releases. They do not control the next alpha number.
 
 ## Purpose
 
-The release automation turns commit history into readable GitHub release notes and alpha prerelease tags.
+The release workflow turns commit history into readable GitHub release-note previews.
 
 It is designed to:
 
 - Read commits since the latest alpha tag.
 - Fall back to the latest normal version tag only when no alpha tag exists yet.
-- Create the next `v0.0.0-alpha.N` tag.
-- Mark GitHub releases from alpha tags as prereleases.
 - Group release notes into readable sections.
 - Link short commit hashes to exact GitHub commit pages.
+- Avoid creating tags or publishing GitHub releases automatically.
 
 It does not update `CHANGELOG.md` or README version/status sections yet.
 
@@ -34,16 +33,13 @@ Planned release path:
 - `v0.0.0-beta.N`: later playable beta iterations.
 - `v1.0.0`: real release after beta.
 
-Only alpha prerelease automation is implemented right now.
+Only release-note preview generation is implemented right now.
 
 ## When It Runs
 
-The workflow runs when:
+The workflow runs only when a maintainer manually starts it with `workflow_dispatch`.
 
-- A commit is pushed to the `main` branch.
-- A maintainer manually starts it with `workflow_dispatch`.
-
-The workflow does not run for pull requests or other branches.
+The workflow does not run automatically for pushes, pull requests, or commit titles.
 
 ## Commit Title Format
 
@@ -74,31 +70,29 @@ BREAKING CHANGE: Existing saved vehicle inventory data must be migrated.
 
 ## Supported Prefixes
 
-| Prefix | Release-note section | Alpha release behavior |
+| Prefix | Release-note section | Release behavior |
 | --- | --- | --- |
-| `feat` | New Features | Creates an alpha release |
-| `fix` | Fixes | Creates an alpha release |
-| `ci` | CI / Automation | Creates an alpha release only for material release automation changes |
-| `docs` | Documentation | No release by itself after an alpha tag exists |
-| `refactor` | Refactors | No release by itself after an alpha tag exists |
-| `chore` | Chores | No release by itself after an alpha tag exists |
-| `build` | Build | No release by itself after an alpha tag exists |
-| `test` | Tests | No release by itself after an alpha tag exists |
-| Unknown prefixes | Other Changes | No release by itself after an alpha tag exists |
+| `feat` | New Features | Does not create a release |
+| `fix` | Fixes | Does not create a release |
+| `ci` | CI / Automation | Does not create a release |
+| `docs` | Documentation | Does not create a release |
+| `refactor` | Refactors | Does not create a release |
+| `chore` | Chores | Does not create a release |
+| `build` | Build | Does not create a release |
+| `test` | Tests | Does not create a release |
+| Unknown prefixes | Other Changes | Does not create a release |
 
-Balance, config, and prototype tuning should usually use `chore:` so those changes do not create releases by themselves.
+Balance, config, and prototype tuning can still use `chore:`, but commit prefixes no longer control release creation.
 
 ## Alpha Version Rules
 
-The automation uses alpha prerelease numbering during the prototype phase.
+Manual releases may use alpha prerelease numbering during the prototype phase.
 
 - If no alpha tags exist, the next alpha release is `v0.0.0-alpha.1`.
 - If `v0.0.0-alpha.1` exists, the next alpha release is `v0.0.0-alpha.2`.
 - Existing normal tags such as `v0.1.0`, `v0.2.0`, or `v0.3.0` do not make the next alpha release become `v0.3.0`.
-- `feat:` creates a new alpha release.
-- `fix:` creates a new alpha release.
-- `ci:` creates a release only when the title or description indicates material release/version/tag automation work.
-- Only `docs:`, `chore:`, `refactor:`, `build:`, `test:`, or unknown commits do not create a new release when an alpha tag already exists.
+- Commit titles do not create new alpha releases.
+- `feat:`, `fix:`, `ci:`, `docs:`, `chore:`, `refactor:`, `build:`, `test:`, and unknown commits are allowed without publishing a release.
 
 ## Release Note Sections
 
@@ -141,20 +135,15 @@ To manually run the release workflow:
 5. Select the `main` branch.
 6. Start the run.
 
-Manual runs use the same rules as pushes to `main`.
+Manual runs generate release-note previews only. They do not create tags or publish GitHub releases.
 
-## Avoiding Accidental Releases
+## Manual Release Control
 
-To avoid unintended alpha releases:
+Commit titles never automatically create or publish releases.
 
-- Use `docs:`, `chore:`, `refactor:`, `build:`, or `test:` for changes that should not release by themselves.
-- Use `chore:` for prototype balance/config tuning unless a release is intentionally needed.
-- Do not use `feat:` unless the change should create a new alpha release.
-- Do not use `fix:` unless the change should create a new alpha release.
-- Use `ci:` for release automation changes, but only material release automation changes should trigger a release.
-- Keep release-triggering commits off `main` until they are ready.
+To publish a release, use an intentional manual release process such as a manually created tag, a user-triggered workflow that explicitly publishes, or another explicit version action.
 
-The workflow is intentionally limited to `main` and manual runs.
+The current workflow is intentionally limited to manual release-note previews.
 
 ## Current File Structure
 
@@ -178,6 +167,6 @@ These are not enabled yet:
 - Adding beta prerelease automation.
 - Promoting to `v1.0.0`.
 - Supporting release branches.
-- Requiring manual approval before tag and release creation.
+- Adding a separate explicit release-publishing workflow.
 
 Review the workflow before adding any of these behaviors.

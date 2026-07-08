@@ -1,17 +1,14 @@
 name: Release
 
 on:
-  push:
-    branches:
-      - main
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   release:
-    name: Semantic release
+    name: Release notes preview
     runs-on: ubuntu-latest
 
     steps:
@@ -26,24 +23,8 @@ jobs:
           GITHUB_REPOSITORY: ${{ github.repository }}
         run: python3 scripts/generate_release.py --notes-file release_notes.md --github-output "$GITHUB_OUTPUT"
 
-      - name: Show generated release notes
-        if: steps.release.outputs.release_needed == 'true'
+      - name: Show generated release notes preview
         run: cat release_notes.md
 
-      - name: Skip release
-        if: steps.release.outputs.release_needed != 'true'
-        run: echo "No release needed for these commits."
-
-      - name: Create tag
-        if: steps.release.outputs.release_needed == 'true'
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git tag "${{ steps.release.outputs.tag }}"
-          git push origin "${{ steps.release.outputs.tag }}"
-
-      - name: Create GitHub release
-        if: steps.release.outputs.release_needed == 'true'
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: gh release create "${{ steps.release.outputs.tag }}" --title "${{ steps.release.outputs.tag }}" --notes-file release_notes.md --prerelease
+      - name: Confirm manual-only release control
+        run: echo "Release notes generated only. This workflow does not create tags or publish GitHub releases."

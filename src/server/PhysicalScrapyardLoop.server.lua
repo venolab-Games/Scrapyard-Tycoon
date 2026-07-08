@@ -1574,7 +1574,6 @@ local function setupBuildButton(step)
 	normalizeBrokenCarDisplayName(button, step)
 	if isExpansionButtonName(step.buttonName) then
 		updateLegacyExpansionDisplayName(button, step)
-		warnStudioAttributeMismatch(button, "BuildCost", step.cost)
 		warnStudioAttributeMismatch(button, "DisplayName", step.displayName)
 	end
 	if step.clearProductionAttributes then
