@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate semantic release metadata from Conventional Commit-style commits."""
+"""Generate release-note metadata from Conventional Commit-style commits."""
 
 from __future__ import annotations
 
@@ -184,10 +184,7 @@ def should_commit_create_alpha_release(commit: Commit) -> bool:
 
 
 def should_create_alpha_release(commits: list[Commit], latest_alpha_tag: str | None) -> bool:
-    if latest_alpha_tag is None:
-        return True
-
-    return any(should_commit_create_alpha_release(commit) for commit in commits)
+    return False
 
 
 def get_highest_bump(commits: list[Commit]) -> str:
@@ -286,17 +283,19 @@ def main() -> None:
     commits = get_commits(compare_tag)
     bump = get_highest_bump(commits)
     release_needed = should_create_alpha_release(commits, latest_alpha_tag)
-    tag = next_alpha_tag(latest_alpha_tag) if release_needed else latest_alpha_tag or ""
+    preview_tag = next_alpha_tag(latest_alpha_tag)
+    tag = ""
     notes_path = Path(args.notes_file)
 
-    if release_needed:
-        notes_path.write_text(build_release_notes(tag, commits, compare_tag), encoding="utf-8")
+    if commits:
+        notes_path.write_text(build_release_notes(preview_tag, commits, compare_tag), encoding="utf-8")
     else:
         notes_path.write_text("No release needed.\n", encoding="utf-8")
 
     outputs = {
         "release_needed": "true" if release_needed else "false",
         "tag": tag,
+        "preview_tag": preview_tag,
         "bump": bump,
         "latest_tag": latest_alpha_tag or "",
         "compare_tag": compare_tag or "",
