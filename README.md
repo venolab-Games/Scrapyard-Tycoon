@@ -36,7 +36,6 @@ The current goal is not to build a giant finished tycoon yet. The goal is to mak
 * Scrapyard
 * Broken Cars
 * Workbench
-* ScrapyardSlab_02
 * Parts Collector
 * CollectPad
 * Build buttons
