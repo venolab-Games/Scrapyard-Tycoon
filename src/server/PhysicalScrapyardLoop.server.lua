@@ -136,10 +136,10 @@ local buildSteps = {
 	brokenCarStep(5, 300, 2, { "BuildButton_BrokenCar_06" }),
 	brokenCarStep(6, 450, 2, { "BuildButton_BrokenCar_07" }),
 	brokenCarStep(7, 650, 2, { "BuildButton_ExpandScrapyard_02" }),
-	brokenCarStep(8, 950, 2, { "BuildButton_BrokenCar_09" }),
-	brokenCarStep(9, 1400, 2, { "BuildButton_BrokenCar_10" }),
-	brokenCarStep(10, 2100, 2, { "BuildButton_BrokenCar_11" }),
-	brokenCarStep(11, 3150, 2),
+	brokenCarStep(8, 950, 3, { "BuildButton_BrokenCar_09" }),
+	brokenCarStep(9, 1400, 3, { "BuildButton_BrokenCar_10" }),
+	brokenCarStep(10, 2100, 3, { "BuildButton_BrokenCar_11" }),
+	brokenCarStep(11, 3150, 3),
 }
 
 local revealObjectAliases = {

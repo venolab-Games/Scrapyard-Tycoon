@@ -22,10 +22,10 @@ local BROKEN_CAR_PRODUCTION = {
 	{ name = "BrokenCar_05", partsPerTick = 2 },
 	{ name = "BrokenCar_06", partsPerTick = 2 },
 	{ name = "BrokenCar_07", partsPerTick = 2 },
-	{ name = "BrokenCar_08", partsPerTick = 2 },
-	{ name = "BrokenCar_09", partsPerTick = 2 },
-	{ name = "BrokenCar_10", partsPerTick = 2 },
-	{ name = "BrokenCar_11", partsPerTick = 2 },
+	{ name = "BrokenCar_08", partsPerTick = 3 },
+	{ name = "BrokenCar_09", partsPerTick = 3 },
+	{ name = "BrokenCar_10", partsPerTick = 3 },
+	{ name = "BrokenCar_11", partsPerTick = 3 },
 }
 local BROKEN_CAR_PARTS_PER_TICK = {}
 
