@@ -7,38 +7,31 @@ local Workspace = game:GetService("Workspace")
 local CurrencyConfig = require(ReplicatedStorage.Shared.CurrencyConfig)
 
 local DEBUG_PREFIX = "[PartsCollector]"
+local ENABLE_DEBUG_LOGS = false
 local BROKEN_CAR_GENERATE_INTERVAL_SECONDS = 1
 local BROKEN_CAR_BASE_PARTS_PER_TICK = 1
 local MAX_STORED_PARTS = 999999
 local COLLECT_DEBOUNCE_SECONDS = 0.75
 local COLLECT_FLASH_SECONDS = 0.18
 local COLLECT_POPUP_SECONDS = 0.8
-local BROKEN_CAR_NAMES = {
-	"BrokenCar_01",
-	"BrokenCar_02",
-	"BrokenCar_03",
-	"BrokenCar_04",
-	"BrokenCar_05",
-	"BrokenCar_06",
-	"BrokenCar_07",
-	"BrokenCar_08",
-	"BrokenCar_09",
-	"BrokenCar_10",
-	"BrokenCar_11",
+local BROKEN_CAR_PRODUCTION = {
+	{ name = "BrokenCar_01", partsPerTick = 1 },
+	{ name = "BrokenCar_02", partsPerTick = 1 },
+	{ name = "BrokenCar_03", partsPerTick = 1 },
+	{ name = "BrokenCar_04", partsPerTick = 2 },
+	{ name = "BrokenCar_05", partsPerTick = 2 },
+	{ name = "BrokenCar_06", partsPerTick = 2 },
+	{ name = "BrokenCar_07", partsPerTick = 2 },
+	{ name = "BrokenCar_08", partsPerTick = 3 },
+	{ name = "BrokenCar_09", partsPerTick = 3 },
+	{ name = "BrokenCar_10", partsPerTick = 3 },
+	{ name = "BrokenCar_11", partsPerTick = 3 },
 }
-local BROKEN_CAR_PARTS_PER_TICK = {
-	BrokenCar_01 = 1,
-	BrokenCar_02 = 1,
-	BrokenCar_03 = 1,
-	BrokenCar_04 = 2,
-	BrokenCar_05 = 2,
-	BrokenCar_06 = 2,
-	BrokenCar_07 = 2,
-	BrokenCar_08 = 3,
-	BrokenCar_09 = 3,
-	BrokenCar_10 = 3,
-	BrokenCar_11 = 3,
-}
+local BROKEN_CAR_PARTS_PER_TICK = {}
+
+for _, config in BROKEN_CAR_PRODUCTION do
+	BROKEN_CAR_PARTS_PER_TICK[config.name] = config.partsPerTick
+end
 
 local collectDebounces = {}
 local counterValueLabels = {}
@@ -51,7 +44,9 @@ local function formatWholeNumber(value)
 end
 
 local function log(message)
-	print(string.format("%s %s", DEBUG_PREFIX, message))
+	if ENABLE_DEBUG_LOGS then
+		print(string.format("%s %s", DEBUG_PREFIX, message))
+	end
 end
 
 local function warnCollector(message)
@@ -358,20 +353,6 @@ local function watchIncomeMultiplier()
 	updatePlayerIncomeRates()
 end
 
-local function isBrokenCarActive(brokenCar)
-	if not brokenCar then
-		return false
-	end
-
-	for _, descendant in brokenCar:GetDescendants() do
-		if descendant:IsA("BasePart") and descendant.Transparency < 1 and descendant.LocalTransparencyModifier < 1 then
-			return true
-		end
-	end
-
-	return false
-end
-
 local function startBrokenCarIncomeLoop(collector, brokenCar)
 	if activeBrokenCarLoops[brokenCar] then
 		return
@@ -418,9 +399,6 @@ local function watchBrokenCarIncome(collector, brokenCar)
 
 	if brokenCar:GetAttribute("CollectorActive") == true then
 		startBrokenCarIncomeLoop(collector, brokenCar)
-	elseif brokenCar:GetAttribute("CollectorActive") == nil and isBrokenCarActive(brokenCar) then
-		warnCollector(string.format("%s is visible but missing CollectorActive attribute; starting collector income loop", brokenCar:GetFullName()))
-		startBrokenCarIncomeLoop(collector, brokenCar)
 	end
 
 	brokenCar:GetAttributeChangedSignal("CollectorActive"):Connect(function()
@@ -439,12 +417,12 @@ local function watchBrokenCars(collector)
 		return
 	end
 
-	for _, brokenCarName in BROKEN_CAR_NAMES do
-		local brokenCar = brokenCarsFolder:FindFirstChild(brokenCarName)
+	for _, config in BROKEN_CAR_PRODUCTION do
+		local brokenCar = brokenCarsFolder:FindFirstChild(config.name)
 		if brokenCar then
 			watchBrokenCarIncome(collector, brokenCar)
 		else
-			warnCollector(string.format("Missing expected broken car for collector income: %s", brokenCarName))
+			warnCollector(string.format("Missing expected broken car for collector income: %s", config.name))
 		end
 	end
 end
