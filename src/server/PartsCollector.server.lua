@@ -21,6 +21,10 @@ local BROKEN_CAR_NAMES = {
 	"BrokenCar_05",
 	"BrokenCar_06",
 	"BrokenCar_07",
+	"BrokenCar_08",
+	"BrokenCar_09",
+	"BrokenCar_10",
+	"BrokenCar_11",
 }
 local BROKEN_CAR_PARTS_PER_TICK = {
 	BrokenCar_01 = 1,
@@ -30,6 +34,10 @@ local BROKEN_CAR_PARTS_PER_TICK = {
 	BrokenCar_05 = 2,
 	BrokenCar_06 = 2,
 	BrokenCar_07 = 2,
+	BrokenCar_08 = 2,
+	BrokenCar_09 = 2,
+	BrokenCar_10 = 2,
+	BrokenCar_11 = 2,
 }
 
 local collectDebounces = {}
@@ -101,16 +109,15 @@ local function getStoredParts(collector)
 		return 0
 	end
 
-	local wholeStoredParts = math.floor(storedParts)
-	if storedParts ~= wholeStoredParts then
-		collector:SetAttribute("StoredParts", wholeStoredParts)
-	end
+	return storedParts
+end
 
-	return wholeStoredParts
+local function getWholeStoredParts(collector)
+	return math.floor(getStoredParts(collector))
 end
 
 local function setStoredParts(collector, value)
-	local clampedValue = math.clamp(math.floor(value), 0, MAX_STORED_PARTS)
+	local clampedValue = math.clamp(value, 0, MAX_STORED_PARTS)
 	collector:SetAttribute("StoredParts", clampedValue)
 	log(string.format("%s StoredParts changed to %s", collector.Name, formatWholeNumber(clampedValue)))
 end
@@ -197,7 +204,7 @@ local function setupCounterText(collector)
 	end
 
 	titleLabel.Text = "Stored Parts"
-	valueLabel.Text = formatWholeNumber(getStoredParts(collector))
+	valueLabel.Text = formatWholeNumber(getWholeStoredParts(collector))
 	counterValueLabels[collector] = valueLabel
 	log(string.format("counter text connected for %s using %s", collector.Name, valueLabel:GetFullName()))
 end
@@ -205,7 +212,7 @@ end
 local function updateCounterValue(collector)
 	local valueLabel = counterValueLabels[collector]
 	if valueLabel and valueLabel.Parent then
-		valueLabel.Text = formatWholeNumber(getStoredParts(collector))
+		valueLabel.Text = formatWholeNumber(getWholeStoredParts(collector))
 	end
 end
 
@@ -448,14 +455,14 @@ local function collectStoredParts(player, collector)
 		return 0
 	end
 
-	local storedParts = getStoredParts(collector)
+	local storedParts = getWholeStoredParts(collector)
 	if storedParts <= 0 then
 		log(string.format("%s attempted collect from %s while empty", player.Name, collector.Name))
 		return 0
 	end
 
 	parts.Value += storedParts
-	setStoredParts(collector, 0)
+	setStoredParts(collector, getStoredParts(collector) - storedParts)
 	log(string.format("%s collected %s Parts from %s", player.Name, formatWholeNumber(storedParts), collector.Name))
 	return storedParts
 end
