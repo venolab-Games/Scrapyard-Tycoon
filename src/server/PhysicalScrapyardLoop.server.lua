@@ -22,6 +22,8 @@ local BUTTON_LABEL_NAME = "BuildButtonLabel"
 local BUTTON_LABEL_SIGN_NAME = "BuildButtonLabelSign"
 local BUTTON_LABEL_SIGN_TAG = "BuildButtonLabelSign"
 local LEGACY_BUTTON_LABEL_ANCHOR_NAME = "BuildButtonLabelAnchor"
+local BUTTON_PANEL_NAME = "Panel"
+local BUTTON_PANEL_BORDER_THICKNESS = 8.4375
 local REMOTES_FOLDER_NAME = "Remotes"
 local INSUFFICIENT_PARTS_REMOTE_NAME = "ShowInsufficientPartsFeedback"
 local SCRAPYARD_LOOKUP_WAIT_SECONDS = 5
@@ -194,6 +196,7 @@ local touchDebounces = {}
 local activePartsValue = nil
 local lastClickByPlayer = {}
 local taggedButtonsByName = {}
+local updateButtonAffordability
 
 local scrapyard = Workspace:FindFirstChild("Scrapyard") or Workspace:WaitForChild("Scrapyard", SCRAPYARD_LOOKUP_WAIT_SECONDS)
 local buildButtons = scrapyard and (scrapyard:FindFirstChild(BUILD_BUTTONS_FOLDER_NAME) or scrapyard:WaitForChild(BUILD_BUTTONS_FOLDER_NAME, SCRAPYARD_LOOKUP_WAIT_SECONDS))
@@ -1153,7 +1156,7 @@ local function createButtonLabelSurface(sign, face)
 	surfaceGui.Parent = sign
 
 	local panel = Instance.new("Frame")
-	panel.Name = "Panel"
+	panel.Name = BUTTON_PANEL_NAME
 	panel.BackgroundColor3 = Color3.fromRGB(23, 28, 34)
 	panel.BackgroundTransparency = 0.12
 	panel.BorderSizePixel = 0
@@ -1166,8 +1169,8 @@ local function createButtonLabelSurface(sign, face)
 
 	local stroke = Instance.new("UIStroke")
 	stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-	stroke.Color = Color3.fromRGB(255, 224, 120)
-	stroke.Thickness = 3
+	stroke.Color = BUTTON_COLORS.CannotAfford
+	stroke.Thickness = BUTTON_PANEL_BORDER_THICKNESS
 	stroke.Transparency = 0.15
 	stroke.Parent = panel
 
@@ -1345,12 +1348,27 @@ local function setupTaggedButtonLabels()
 	end
 
 	CollectionService:GetInstanceAddedSignal("Button"):Connect(function(button)
-		task.defer(setupButtonLabel, button)
+		task.defer(function()
+			setupButtonLabel(button)
+			updateButtonAffordability()
+		end)
 	end)
 
 	CollectionService:GetInstanceRemovedSignal("Button"):Connect(function(button)
 		disconnectButtonLabel(button)
 	end)
+
+	updateButtonAffordability()
+end
+
+local function setButtonPanelBorderColor(button, color)
+	for _, labelGui in getButtonLabelGuis(button) do
+		local panel = labelGui:FindFirstChild(BUTTON_PANEL_NAME)
+		local stroke = panel and panel:FindFirstChildWhichIsA("UIStroke")
+		if stroke then
+			stroke.Color = color
+		end
+	end
 end
 
 local function setButtonColor(button, color)
@@ -1364,6 +1382,8 @@ local function setButtonColor(button, color)
 			instance.Material = Enum.Material.Neon
 		end
 	end)
+
+	setButtonPanelBorderColor(button, color)
 end
 
 local function disableButtonPrompts(button)
@@ -1386,17 +1406,30 @@ local function configureTouchPart(button, touchPart)
 	debugLog(string.format("touch part for %s: %s", button.Name, touchPart:GetFullName()))
 end
 
-local function updateButtonAffordability()
+updateButtonAffordability = function()
 	local partsValue = activePartsValue and activePartsValue.Value or 0
+	local configuredButtons = {}
 
 	for _, step in buildSteps do
 		local button = buttonsByName[step.buttonName]
 		if button and not purchasedButtons[step.buttonName] then
+			configuredButtons[button] = true
 			local cost = button:GetAttribute("BuildCost") or step.cost
 			if typeof(cost) == "number" and partsValue >= cost then
 				setButtonColor(button, BUTTON_COLORS.CanAfford)
 			else
 				setButtonColor(button, BUTTON_COLORS.CannotAfford)
+			end
+		end
+	end
+
+	for _, button in CollectionService:GetTagged("Button") do
+		if not configuredButtons[button] and button:GetAttribute("Purchased") ~= true then
+			local cost = getButtonBuildCost(button)
+			if typeof(cost) == "number" and partsValue >= cost then
+				setButtonPanelBorderColor(button, BUTTON_COLORS.CanAfford)
+			else
+				setButtonPanelBorderColor(button, BUTTON_COLORS.CannotAfford)
 			end
 		end
 	end
