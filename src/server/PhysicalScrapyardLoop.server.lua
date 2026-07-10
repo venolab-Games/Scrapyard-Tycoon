@@ -115,7 +115,7 @@ local buildSteps = {
 	},
 	hiddenButtonStep({
 		buttonName = "BuildButton_UnlockOperation",
-		revealObjects = { "ScrapyardSlab_04", "ScrapyardFence_04", "ScrapyardPath_08", "ScrapyardPath_09" },
+		revealObjects = { "ScrapyardSlab_04", "ScrapyardFence_04", "ScrapyardPath_09", "ScrapyardPath_10" },
 		hideDescendants = {
 			{
 				objectName = "ScrapyardFence_01",
@@ -130,17 +130,27 @@ local buildSteps = {
 				descendantNames = FENCE_02_EXPANSION_OPENING_PIECES,
 			},
 		},
+		revealButtons = { "BuildButton_CrushableCar" },
+	}),
+	hiddenButtonStep({
+		buttonName = "BuildButton_CrushableCar",
+		revealObjects = { "CrushableCar" },
 		revealButtons = { "BuildButton_Crane" },
 	}),
 	hiddenButtonStep({
 		buttonName = "BuildButton_Crane",
 		revealObjects = { "Crane" },
+		revealButtons = { "BuildButton_Crusher" },
+	}),
+	hiddenButtonStep({
+		buttonName = "BuildButton_Crusher",
+		revealObjects = { "Crusher" },
 		revealButtons = {},
 	}),
 	expansionStep(1, {
 		buttonAliases = { "BuildButton_ExpandScrapyard", "BuildButton_Garden" },
 		cost = 150,
-		revealObjects = { "ScrapyardSlab_02", "ScrapyardFence_02", "ScrapyardPath_04", "ScrapyardPath_05" },
+		revealObjects = { "ScrapyardSlab_02", "ScrapyardFence_02", "ScrapyardPath_04", "ScrapyardPath_05", "ScrapyardPath_06" },
 		hideDescendants = {
 			{
 				objectName = "ScrapyardFence_01",
@@ -151,7 +161,7 @@ local buildSteps = {
 	}),
 	expansionStep(2, {
 		cost = 500,
-		revealObjects = { "ScrapyardSlab_03", "ScrapyardFence_03", "ScrapyardPath_06", "ScrapyardPath_07" },
+		revealObjects = { "ScrapyardSlab_03", "ScrapyardFence_03", "ScrapyardPath_07", "ScrapyardPath_08" },
 		hideDescendants = {
 			{
 				objectName = "ScrapyardFence_02",
@@ -475,8 +485,8 @@ end
 local function getRevealObject(objectName)
 	refreshScrapyardReferences()
 
-	if objectName == "Crane" then
-		return unlockObjects and unlockObjects:FindFirstChild("Crane")
+	if objectName == "Crane" or objectName == "Crusher" then
+		return unlockObjects and unlockObjects:FindFirstChild(objectName)
 	end
 
 	if objectName:match("^BrokenCar_") then
@@ -722,7 +732,7 @@ local function validateScrapyardLayoutObjectPlacement()
 		validateUnlockObjectPlacement(objectName)
 	end
 
-	for index = 1, 9 do
+	for index = 1, 10 do
 		validateUnlockObjectPlacement(string.format("ScrapyardPath_%02d", index))
 	end
 end
@@ -990,7 +1000,7 @@ local function disconnectButtonLabel(button)
 end
 
 local function prettifyButtonName(buttonName)
-	local displayName = buttonName:gsub("^BuildButton_", ""):gsub("_", " ")
+	local displayName = buttonName:gsub("^BuildButton_", ""):gsub("(%l)(%u)", "%1 %2"):gsub("_", " ")
 	displayName = displayName:gsub("(%a)(%w*)", function(first, rest)
 		return first:upper() .. rest:lower()
 	end)
@@ -1450,7 +1460,7 @@ local function revealObject(objectName)
 	local processed = setObjectHidden(object, false)
 	debugLog(string.format("reveal processed %d descendants for %s", processed, objectName))
 
-	if objectName:match("^BrokenCar_") then
+	if objectName:match("^BrokenCar_") and BrokenCarProduction.PartsPerSecondByName[objectName] then
 		object:SetAttribute("CollectorActive", true)
 		debugLog(string.format("%s marked CollectorActive for Parts collector income", objectName))
 	end
@@ -1911,7 +1921,7 @@ local function hideInitialObject(objectName)
 	end
 
 	local processed = setObjectHidden(object, true)
-	if objectName:match("^BrokenCar_") then
+	if objectName:match("^BrokenCar_") and BrokenCarProduction.PartsPerSecondByName[objectName] then
 		object:SetAttribute("CollectorActive", false)
 	end
 	debugLog(string.format("initial hide processed %d descendants for %s", processed, objectName))
