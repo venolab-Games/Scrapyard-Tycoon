@@ -4,6 +4,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TweenService = game:GetService("TweenService")
 local Workspace = game:GetService("Workspace")
 
+local BrokenCarProduction = require(ReplicatedStorage.Shared.BrokenCarProduction)
 local CurrencyConfig = require(ReplicatedStorage.Shared.CurrencyConfig)
 
 local DEBUG_PREFIX = "[PhysicalScrapyardLoop]"
@@ -60,6 +61,21 @@ local FENCE_02_EXPANSION_OPENING_PIECES = {
 	"FencePost_23",
 }
 
+local FENCE_01_OPERATION_OPENING_PIECES = {
+	"FenceBeam_11",
+	"FenceBeam_12",
+	"FenceBeam_13",
+	"FenceBeam_14",
+	"FenceBeam_15",
+	"FenceBeam_16",
+	"FencePost_12",
+	"FencePost_13",
+	"FencePost_14",
+	"FencePost_15",
+	"FencePost_16",
+	"FencePost_17",
+}
+
 local function hiddenButtonStep(config)
 	config.buttonFolder = HIDDEN_BUTTONS_FOLDER_NAME
 	return config
@@ -73,14 +89,14 @@ local function expansionStep(index, config)
 	return config
 end
 
-local function brokenCarStep(index, cost, partsPerSecond, revealButtons)
+local function brokenCarStep(index, cost, revealButtons)
 	local brokenCarName = string.format("BrokenCar_%02d", index)
 
 	return hiddenButtonStep({
 		buttonName = string.format("BuildButton_BrokenCar_%02d", index),
 		displayName = BROKEN_CAR_DISPLAY_NAME,
 		cost = cost,
-		producesPartsPerSecond = partsPerSecond,
+		producesPartsPerSecond = BrokenCarProduction.PartsPerSecondByName[brokenCarName],
 		revealObjects = { brokenCarName },
 		revealButtons = revealButtons or {},
 	})
@@ -95,6 +111,30 @@ local buildSteps = {
 		revealObjects = { "ScrapyardFence_01", "ScrapyardPath_01", "ScrapyardPath_02", "ScrapyardPath_03" },
 		revealButtons = { "BuildButton_BrokenCar_01" },
 	},
+	hiddenButtonStep({
+		buttonName = "BuildButton_UnlockOperation",
+		revealObjects = { "ScrapyardSlab_04", "ScrapyardFence_04", "ScrapyardPath_08", "ScrapyardPath_09" },
+		hideDescendants = {
+			{
+				objectName = "ScrapyardFence_01",
+				parentFolderName = FENCES_FOLDER_NAME,
+				expectedPath = "Workspace > Scrapyard > UnlockObjects > Fences > ScrapyardFence_01",
+				descendantNames = FENCE_01_OPERATION_OPENING_PIECES,
+			},
+			{
+				objectName = "ScrapyardFence_03",
+				parentFolderName = FENCES_FOLDER_NAME,
+				expectedPath = "Workspace > Scrapyard > UnlockObjects > Fences > ScrapyardFence_03",
+				descendantNames = FENCE_02_EXPANSION_OPENING_PIECES,
+			},
+		},
+		revealButtons = { "BuildButton_Crane" },
+	}),
+	hiddenButtonStep({
+		buttonName = "BuildButton_Crane",
+		revealObjects = { "Crane" },
+		revealButtons = {},
+	}),
 	expansionStep(1, {
 		buttonAliases = { "BuildButton_ExpandScrapyard", "BuildButton_Garden" },
 		cost = 150,
@@ -129,17 +169,17 @@ local buildSteps = {
 		revealObjects = { "Workbench" },
 		revealButtons = {},
 	}),
-	brokenCarStep(1, 15, 1, { "BuildButton_BrokenCar_02", "BuildButton_Workbench" }),
-	brokenCarStep(2, 23, 1, { "BuildButton_BrokenCar_03" }),
-	brokenCarStep(3, 34, 1, { "BuildButton_ExpandScrapyard_01" }),
-	brokenCarStep(4, 200, 2, { "BuildButton_BrokenCar_05" }),
-	brokenCarStep(5, 300, 2, { "BuildButton_BrokenCar_06" }),
-	brokenCarStep(6, 450, 2, { "BuildButton_BrokenCar_07" }),
-	brokenCarStep(7, 650, 2, { "BuildButton_ExpandScrapyard_02" }),
-	brokenCarStep(8, 950, 3, { "BuildButton_BrokenCar_09" }),
-	brokenCarStep(9, 1400, 3, { "BuildButton_BrokenCar_10" }),
-	brokenCarStep(10, 2100, 3, { "BuildButton_BrokenCar_11" }),
-	brokenCarStep(11, 3150, 3),
+	brokenCarStep(1, 15, { "BuildButton_BrokenCar_02", "BuildButton_Workbench" }),
+	brokenCarStep(2, 23, { "BuildButton_BrokenCar_03" }),
+	brokenCarStep(3, 34, { "BuildButton_ExpandScrapyard_01" }),
+	brokenCarStep(4, 200, { "BuildButton_BrokenCar_05" }),
+	brokenCarStep(5, 300, { "BuildButton_BrokenCar_06" }),
+	brokenCarStep(6, 450, { "BuildButton_BrokenCar_07" }),
+	brokenCarStep(7, 650, { "BuildButton_ExpandScrapyard_02" }),
+	brokenCarStep(8, 950, { "BuildButton_BrokenCar_09" }),
+	brokenCarStep(9, 1400, { "BuildButton_BrokenCar_10" }),
+	brokenCarStep(10, 2100, { "BuildButton_BrokenCar_11" }),
+	brokenCarStep(11, 3150, { "BuildButton_UnlockOperation" }),
 }
 
 local revealObjectAliases = {
@@ -432,6 +472,10 @@ end
 local function getRevealObject(objectName)
 	refreshScrapyardReferences()
 
+	if objectName == "Crane" then
+		return unlockObjects and unlockObjects:FindFirstChild("Crane")
+	end
+
 	if objectName:match("^BrokenCar_") then
 		local brokenCar = brokenCars and brokenCars:FindFirstChild(objectName)
 		if brokenCar then
@@ -671,11 +715,11 @@ local function validateUnlockObjectPlacement(objectName)
 end
 
 local function validateScrapyardLayoutObjectPlacement()
-	for _, objectName in { "ScrapyardFence_01", "ScrapyardFence_02", "ScrapyardFence_03", "ScrapyardSlab_02", "ScrapyardSlab_03", "ScrapyardSlab_04" } do
+	for _, objectName in { "ScrapyardFence_01", "ScrapyardFence_02", "ScrapyardFence_03", "ScrapyardFence_04", "ScrapyardSlab_02", "ScrapyardSlab_03", "ScrapyardSlab_04" } do
 		validateUnlockObjectPlacement(objectName)
 	end
 
-	for index = 1, 7 do
+	for index = 1, 9 do
 		validateUnlockObjectPlacement(string.format("ScrapyardPath_%02d", index))
 	end
 end
@@ -762,6 +806,18 @@ local function rememberOriginalState(instance)
 		if instance:GetAttribute("OriginalEnabled") == nil then
 			instance:SetAttribute("OriginalEnabled", instance.Enabled)
 		end
+	elseif instance:IsA("Beam")
+		or instance:IsA("ParticleEmitter")
+		or instance:IsA("Trail")
+		or instance:IsA("Smoke")
+		or instance:IsA("Fire")
+		or instance:IsA("Sparkles")
+		or instance:IsA("Light")
+		or instance:IsA("Highlight")
+	then
+		if instance:GetAttribute("OriginalEnabled") == nil then
+			instance:SetAttribute("OriginalEnabled", instance.Enabled)
+		end
 	end
 end
 
@@ -804,6 +860,16 @@ local function setObjectHidden(object, hidden, options)
 		elseif instance:IsA("Decal") or instance:IsA("Texture") then
 			instance.Transparency = hidden and 1 or getOriginalNumber(instance, "OriginalTransparency", instance.Transparency)
 		elseif instance:IsA("SurfaceGui") or instance:IsA("BillboardGui") then
+			instance.Enabled = hidden and false or (instance:GetAttribute("OriginalEnabled") ~= false)
+		elseif instance:IsA("Beam")
+			or instance:IsA("ParticleEmitter")
+			or instance:IsA("Trail")
+			or instance:IsA("Smoke")
+			or instance:IsA("Fire")
+			or instance:IsA("Sparkles")
+			or instance:IsA("Light")
+			or instance:IsA("Highlight")
+		then
 			instance.Enabled = hidden and false or (instance:GetAttribute("OriginalEnabled") ~= false)
 		elseif instance:IsA("ProximityPrompt") then
 			instance.Enabled = false
@@ -1023,7 +1089,7 @@ local function updateButtonLabelVisibility(button)
 	end
 
 	local labelGuis = getButtonLabelGuis(button)
-	if not touchPart or #labelGuis == 0 then
+	if not touchPart then
 		return
 	end
 
@@ -1327,13 +1393,14 @@ local function updateButtonAffordability()
 		local button = buttonsByName[step.buttonName]
 		if button and not purchasedButtons[step.buttonName] then
 			local cost = button:GetAttribute("BuildCost") or step.cost
-			if partsValue >= cost then
+			if typeof(cost) == "number" and partsValue >= cost then
 				setButtonColor(button, BUTTON_COLORS.CanAfford)
 			else
 				setButtonColor(button, BUTTON_COLORS.CannotAfford)
 			end
 		end
 	end
+
 end
 
 local function revealObject(objectName)
@@ -1367,6 +1434,7 @@ local function revealButton(buttonName)
 	local processed = setObjectHidden(button, false)
 	disableButtonPrompts(button)
 	unlockedButtons[buttonName] = true
+	updateButtonAffordability()
 	updateButtonLabelVisibility(button)
 	debugLog(string.format("revealed button %s; processed %d descendants", buttonName, processed))
 end
@@ -1386,7 +1454,7 @@ local function hideNamedUnlockDescendants(step)
 		local object = nil
 		if hideConfig.parentFolderName == FENCES_FOLDER_NAME then
 			local fencesFolder = getFencesFolder()
-			object = fencesFolder and fencesFolder:FindFirstChild(hideConfig.objectName)
+			object = findDescendantByName(fencesFolder, hideConfig.objectName)
 		else
 			object = getRevealObject(hideConfig.objectName)
 		end
@@ -1565,7 +1633,7 @@ local function setupBuildButton(step)
 	end
 
 	buttonsByName[step.buttonName] = button
-	if button:GetAttribute("BuildCost") == nil then
+	if button:GetAttribute("BuildCost") == nil and step.cost ~= nil then
 		button:SetAttribute("BuildCost", step.cost)
 	end
 	if step.displayName and button:GetAttribute("DisplayName") == nil then
@@ -1585,8 +1653,9 @@ local function setupBuildButton(step)
 	if step.incomeMultiplier then
 		button:SetAttribute(CurrencyConfig.PartsIncomeMultiplierAttribute, step.incomeMultiplier)
 	end
-	if step.producesPartsPerSecond and button:GetAttribute("ProducesPartsPerSecond") == nil and button:GetAttribute("PartsPerSecond") == nil then
+	if step.producesPartsPerSecond then
 		button:SetAttribute("ProducesPartsPerSecond", step.producesPartsPerSecond)
+		button:SetAttribute("PartsPerSecond", nil)
 	end
 	updateButtonLabelText(button)
 	debugLog(string.format("found build button %s: %s", step.buttonName, button:GetFullName()))
@@ -1898,9 +1967,9 @@ scanTaggedButtons()
 warnDuplicateExpectedObjects()
 validateScrapyardLayoutObjectPlacement()
 validateExpansionBrokenCarButtonSetup()
-setupTaggedButtonLabels()
 hideInitialScrapyardObjects()
 setupBuildButtons()
+setupTaggedButtonLabels()
 setupCarPileClick()
 
 Players.PlayerAdded:Connect(function(player)
