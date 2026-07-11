@@ -1,8 +1,8 @@
 # Commit Style Guide
 
-Use clear GitHub Desktop commit titles so release-note previews can group what changed.
+Use clear GitHub Desktop commit titles so the release-notes preview can organize what changed.
 
-This repository does not create alpha prerelease tags from Conventional Commit-style titles.
+Commit prefixes help group release-note text. They do not create tags, publish GitHub releases, or bump versions.
 
 ## Commit Title Format
 
@@ -23,7 +23,7 @@ Examples:
 ```text
 feat: add vehicle showroom filtering
 fix: prevent duplicate purchase prompts
-docs: update release automation guide
+docs: update release notes preview guide
 chore: tune prototype parts income
 ```
 
@@ -31,44 +31,32 @@ chore: tune prototype parts income
 
 Use these prefixes in commit titles:
 
-| Type | Use when | Release effect |
-| --- | --- | --- |
-| `feat` | Adding a player-facing feature | Does not create a release |
-| `fix` | Fixing a bug | Does not create a release |
-| `ci` | Changing release/version automation | Does not create a release |
-| `docs` | Changing documentation | Does not create a release |
-| `refactor` | Improving code without changing behavior | Does not create a release |
-| `chore` | Maintenance, balance, config, or prototype tuning | Does not create a release |
-| `build` | Changing build or tooling setup | Does not create a release |
-| `test` | Adding or updating tests | Does not create a release |
+| Type | Use when | Release-note section | Automatic release effect |
+| --- | --- | --- | --- |
+| `feat` | Adding a player-facing feature | New Features | None |
+| `fix` | Fixing a bug | Fixes | None |
+| `ci` | Changing workflow or CI setup | CI / Automation | None |
+| `docs` | Changing documentation | Documentation | None |
+| `refactor` | Improving code without changing behavior | Refactors | None |
+| `chore` | Maintenance, balance, config, or prototype tuning | Chores | None |
+| `build` | Changing build or tooling setup | Build | None |
+| `test` | Adding or updating tests | Tests | None |
 
-Unknown prefixes are grouped under Other Changes and do not create a release.
+Unknown prefixes are grouped under Other Changes and still do not create a release.
 
 ## Version Meaning
 
-During the prototype alpha phase, intentional manual releases may use this sequence:
+Manual tags and manually created GitHub releases are the source of truth.
 
-```text
-v0.0.0-alpha.1
-v0.0.0-alpha.2
-v0.0.0-alpha.3
-```
-
-Existing normal tags like `v0.1.0` and `v0.2.0` can remain as early automation test releases, but they do not control future alpha numbering.
-
-Release behavior:
-
-- Commit titles do not create alpha prereleases.
-- `feat:`, `fix:`, `ci:`, `docs:`, `chore:`, `refactor:`, `build:`, `test:`, and unknown commits are allowed without publishing a release.
-- Balance/config/prototype tuning can still use `chore:`.
+The release-notes preview reads commits since the latest reachable tag and writes formatted notes for review before a maintainer creates a release manually.
 
 Planned long-term path:
 
-- `v0.0.0-alpha.N`: early prototype iterations.
-- `v0.0.0-beta.N`: later playable beta iterations.
+- `v0.0.0-alpha.N`: early prototype iterations, if manually used.
+- `v0.0.0-beta.N`: later playable beta iterations, if manually used.
 - `v1.0.0`: real release after beta.
 
-Beta and `v1.0.0` promotion are not implemented yet.
+The workflow does not create these tags automatically.
 
 ## Breaking Changes
 
@@ -85,7 +73,7 @@ In the GitHub Desktop description field, explain the break:
 BREAKING CHANGE: Existing saved vehicle inventory data must be migrated.
 ```
 
-During alpha, breaking-change labels are preserved in release-note previews but do not create a release.
+Breaking changes are marked with `[BREAKING]` in the release-notes preview, but they still do not create tags, releases, or version bumps.
 
 ## Writing Good Titles
 
@@ -128,27 +116,30 @@ Reduces the prototype Motor Pool upgrade cost for faster local testing.
 Tested by waiting for Parts income and buying the upgrade once.
 ```
 
-## Manual Release Workflow
+## Manual Release Notes Preview
 
-The release workflow is a manual release-note preview.
+To run the preview locally:
 
-To manually trigger it:
+```powershell
+python scripts/generate_release.py --notes-file release_notes.md
+```
+
+To run the GitHub Actions preview:
 
 1. Open the repository on GitHub.
 2. Go to Actions.
-3. Select Release.
+3. Select Release Notes Preview.
 4. Choose Run workflow.
-5. Run it against `main`.
+5. Run it against the branch you want to preview.
 
-## Manual Release Control
-
-Commit names never automatically create or publish releases. Conventional commit labels are still encouraged because they keep generated release-note previews organized.
+The local script writes `release_notes.md`. The GitHub Actions workflow prints the preview in logs, adds it to the job summary, and uploads it as the `release-notes-preview` artifact.
 
 ## Quick Checklist
 
 Before committing:
 
-- The title starts with a supported type.
+- The title starts with a supported type when one fits.
 - The title says what changed.
 - The description explains anything risky or non-obvious.
-- Prototype tuning uses `chore:` unless a release is intentional.
+- Prototype tuning usually uses `chore:`.
+- Release tags and GitHub releases are created manually only when ready.

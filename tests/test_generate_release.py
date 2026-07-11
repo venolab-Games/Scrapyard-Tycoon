@@ -1,19 +1,9 @@
 import unittest
 
-from scripts.generate_release import Commit, build_release_notes, should_create_alpha_release
+from scripts.generate_release import Commit, build_release_notes, should_create_release
 
 
 class BuildReleaseNotesTests(unittest.TestCase):
-    def test_commit_titles_do_not_request_alpha_release(self):
-        commits = [
-            Commit("1" * 40, "feat: add player sprint", ""),
-            Commit("2" * 40, "fix: prevent stuck sprint speed", ""),
-            Commit("3" * 40, "ci: update release workflow", "release tag version"),
-        ]
-
-        self.assertFalse(should_create_alpha_release(commits, None))
-        self.assertFalse(should_create_alpha_release(commits, "v0.0.0-alpha.9"))
-
     def test_body_starts_with_changes_line_without_version_heading(self):
         notes = build_release_notes(
             "v0.0.0-alpha.4",
@@ -21,7 +11,9 @@ class BuildReleaseNotesTests(unittest.TestCase):
             "v0.0.0-alpha.3",
         )
 
-        self.assertTrue(notes.startswith("Changes since v0.0.0-alpha.3.\n"))
+        self.assertIn("Release notes preview.\n", notes)
+        self.assertIn("No tag, GitHub release, or version bump was created.\n", notes)
+        self.assertIn("Changes since v0.0.0-alpha.3.\n", notes)
         self.assertNotIn("# v0.0.0-alpha.4", notes)
         self.assertNotIn("## v0.0.0-alpha.4", notes)
 
@@ -60,6 +52,28 @@ class BuildReleaseNotesTests(unittest.TestCase):
 
         self.assertNotIn("## Build", notes)
         self.assertNotIn("## Tests", notes)
+
+    def test_commit_prefixes_do_not_request_release_creation(self):
+        commits = [
+            Commit("1" * 40, "feat: add vehicle showroom filtering", ""),
+            Commit("2" * 40, "fix: prevent duplicate purchase prompts", ""),
+            Commit("3" * 40, "chore: tune prototype parts income", ""),
+            Commit("4" * 40, "refactor: simplify upgrade lookup", ""),
+        ]
+
+        self.assertFalse(should_create_release(commits))
+
+    def test_breaking_changes_do_not_request_release_creation(self):
+        commits = [
+            Commit("1" * 40, "feat!: replace vehicle save data format", ""),
+            Commit(
+                "2" * 40,
+                "fix(data): remove legacy inventory fallback",
+                "BREAKING CHANGE: Existing saved vehicle inventory data must be migrated.",
+            ),
+        ]
+
+        self.assertFalse(should_create_release(commits))
 
 
 if __name__ == "__main__":

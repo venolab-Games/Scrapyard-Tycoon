@@ -1,4 +1,4 @@
-name: Release
+name: Release Notes Preview
 
 on:
   workflow_dispatch:
@@ -7,8 +7,8 @@ permissions:
   contents: read
 
 jobs:
-  release:
-    name: Release notes preview
+  preview:
+    name: Generate release notes preview
     runs-on: ubuntu-latest
 
     steps:
@@ -17,14 +17,27 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Generate release metadata
+      - name: Generate release notes preview
         id: release
         env:
           GITHUB_REPOSITORY: ${{ github.repository }}
         run: python3 scripts/generate_release.py --notes-file release_notes.md --github-output "$GITHUB_OUTPUT"
 
-      - name: Show generated release notes preview
+      - name: Show release notes preview
         run: cat release_notes.md
 
-      - name: Confirm manual-only release control
-        run: echo "Release notes generated only. This workflow does not create tags or publish GitHub releases."
+      - name: Add preview to job summary
+        run: |
+          {
+            echo "## Release notes preview"
+            echo
+            cat release_notes.md
+            echo
+            echo "No tag, GitHub release, or version bump was created."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload release notes preview
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-notes-preview
+          path: release_notes.md
