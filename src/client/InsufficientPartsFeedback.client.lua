@@ -16,21 +16,19 @@ local COLLECT_PAD_TAG = "CollectPad"
 local COLLECTOR_TAG = "Collector"
 local PART_CLICK_SOURCE_TAG = "PartClickSource"
 local COLLECT_TEXT = "Collect Parts"
-local CLICK_TEXT = "Click"
 local TOTAL_SECONDS = 7
 local FADE_SECONDS = 1.25
 local HOLD_SECONDS = TOTAL_SECONDS - (FADE_SECONDS * 2)
-local ARROW_COLOR = Color3.fromRGB(88, 255, 130)
+local ARROW_IMAGE = "rbxassetid://97625287185566"
 local ARROW_FLOAT_OFFSET = Vector3.new(0, 0.2, 0)
-local ARROW_FLOW_STUDS_PER_SECOND = 2
-local ARROW_SCREEN_ROTATION_OFFSET = 180
+local ARROW_FLOW_STUDS_PER_SECOND = 3
+local ARROW_VISUAL_SIZE_PIXELS = 80.5
+local ARROW_MARKER_SIZE_STUDS = 4
 local MIN_ARROW_COUNT = 3
 local MAX_ARROW_COUNT = 12
 local STUDS_PER_ARROW = 7
-local START_OFFSET = 4
+local START_OFFSET = 0
 local TARGET_CLEARANCE = 5
-local END_FADE_DISTANCE = 8
-local START_FADE_DISTANCE = 7
 
 local warnedMissingCollectPad = false
 local warnedMissingCarPile = false
@@ -239,21 +237,21 @@ local function selectGuideTarget(startPosition)
 	if shouldCollect then
 		local collectPad = findClosestCollectPad(startPosition)
 		if collectPad then
-			return collectPad, COLLECT_TEXT
+			return collectPad
 		end
 	end
 
 	local carPile = findCarPileTarget()
 	if carPile then
-		return carPile, CLICK_TEXT
+		return carPile
 	end
 
 	local collectPad = findClosestCollectPad(startPosition)
 	if collectPad then
-		return collectPad, COLLECT_TEXT
+		return collectPad
 	end
 
-	return nil, COLLECT_TEXT
+	return nil
 end
 
 local function createFallbackMessage(text)
@@ -279,44 +277,6 @@ local function createFallbackMessage(text)
 	return label
 end
 
-local function createTargetPanel(target, text)
-	local billboard = trackObject(Instance.new("BillboardGui"))
-	billboard.Name = "GuideTargetPanel"
-	billboard.Adornee = target
-	billboard.AlwaysOnTop = true
-	billboard.LightInfluence = 0
-	billboard.MaxDistance = 450
-	billboard.Size = UDim2.fromOffset(text == CLICK_TEXT and 92 or 150, 34)
-	billboard.StudsOffsetWorldSpace = Vector3.new(0, text == CLICK_TEXT and 3.2 or 4, 0)
-	billboard.Parent = playerGui
-
-	local label = trackObject(Instance.new("TextLabel"))
-	label.Name = "Message"
-	label.Size = UDim2.fromScale(1, 1)
-	label.BackgroundColor3 = Color3.fromRGB(23, 28, 34)
-	label.BackgroundTransparency = 1
-	label.BorderSizePixel = 0
-	label.Font = Enum.Font.GothamBold
-	label.Text = text
-	label.TextColor3 = text == CLICK_TEXT and Color3.fromRGB(255, 230, 126) or Color3.fromRGB(235, 255, 240)
-	label.TextSize = 16
-	label.TextTransparency = 1
-	label.Parent = billboard
-
-	local corner = Instance.new("UICorner")
-	corner.CornerRadius = UDim.new(0, 8)
-	corner.Parent = label
-
-	local stroke = trackObject(Instance.new("UIStroke"))
-	stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-	stroke.Color = Color3.fromRGB(255, 224, 120)
-	stroke.Thickness = 2
-	stroke.Transparency = 1
-	stroke.Parent = label
-
-	return label, stroke
-end
-
 local function createArrowAnchor(parent)
 	local part = trackObject(Instance.new("Part"))
 	part.Name = "ArrowBreadcrumbAnchor"
@@ -325,7 +285,8 @@ local function createArrowAnchor(parent)
 	part.CanQuery = false
 	part.CanTouch = false
 	part.CastShadow = false
-	part.Size = Vector3.new(0.2, 0.2, 0.2)
+	part.Massless = true
+	part.Size = Vector3.new(ARROW_MARKER_SIZE_STUDS, 0.05, ARROW_MARKER_SIZE_STUDS)
 	part.Transparency = 1
 	part.Parent = parent
 	return part
@@ -333,36 +294,30 @@ end
 
 local function createBreadcrumb(parent)
 	local anchor = createArrowAnchor(parent)
-	local billboard = trackObject(Instance.new("BillboardGui"))
-	billboard.Name = "CollectPartsBreadcrumb"
-	billboard.Adornee = anchor
-	billboard.AlwaysOnTop = true
-	billboard.LightInfluence = 0
-	billboard.MaxDistance = 500
-	billboard.Size = UDim2.fromOffset(46, 46)
-	billboard.Parent = playerGui
+	local surfaceGui = trackObject(Instance.new("SurfaceGui"))
+	surfaceGui.Name = "CollectPartsBreadcrumb"
+	surfaceGui.Adornee = anchor
+	surfaceGui.AlwaysOnTop = false
+	surfaceGui.CanvasSize = Vector2.new(ARROW_VISUAL_SIZE_PIXELS, ARROW_VISUAL_SIZE_PIXELS)
+	surfaceGui.Face = Enum.NormalId.Top
+	surfaceGui.LightInfluence = 0
+	surfaceGui.SizingMode = Enum.SurfaceGuiSizingMode.FixedSize
+	surfaceGui.Parent = playerGui
 
-	local label = trackObject(Instance.new("TextLabel"))
-	label.Name = "Arrow"
-	label.Size = UDim2.fromScale(1, 1)
-	label.BackgroundTransparency = 1
-	label.Font = Enum.Font.GothamBlack
-	label.Text = "<"
-	label.TextColor3 = ARROW_COLOR
-	label.TextSize = 42
-	label.TextStrokeColor3 = Color3.fromRGB(0, 64, 24)
-	label.TextStrokeTransparency = 1
-	label.TextTransparency = 1
-	label.Parent = billboard
-
-	local scale = Instance.new("UIScale")
-	scale.Scale = 1.1
-	scale.Parent = label
+	local image = trackObject(Instance.new("ImageLabel"))
+	image.Name = "Arrow"
+	image.Size = UDim2.fromScale(1, 1)
+	image.BackgroundTransparency = 1
+	image.Image = ARROW_IMAGE
+	image.ImageTransparency = 0
+	image.Rotation = 90
+	image.ScaleType = Enum.ScaleType.Fit
+	image.Parent = surfaceGui
 
 	return {
 		anchor = anchor,
-		billboard = billboard,
-		label = label,
+		surfaceGui = surfaceGui,
+		image = image,
 	}
 end
 
@@ -373,66 +328,21 @@ local function destroyBreadcrumb(index)
 	end
 
 	breadcrumb.anchor:Destroy()
-	breadcrumb.label:Destroy()
-	if breadcrumb.billboard then
-		breadcrumb.billboard:Destroy()
+	breadcrumb.image:Destroy()
+	if breadcrumb.surfaceGui then
+		breadcrumb.surfaceGui:Destroy()
 	end
 	table.remove(activeBreadcrumbs, index)
 end
 
-local function fadeRemoveBreadcrumb(index, fadeOut)
-	local breadcrumb = activeBreadcrumbs[index]
-	if not breadcrumb then
-		return
-	end
-
-	table.remove(activeBreadcrumbs, index)
-	tween(breadcrumb.label, fadeOut, {
-		TextTransparency = 1,
-		TextStrokeTransparency = 1,
-	})
-
-	task.delay(fadeOut.Time, function()
-		if breadcrumb.anchor then
-			breadcrumb.anchor:Destroy()
-		end
-		if breadcrumb.label then
-			breadcrumb.label:Destroy()
-		end
-		if breadcrumb.billboard then
-			breadcrumb.billboard:Destroy()
-		end
-	end)
-end
-
-local function getEndpointFade(distanceAlongPath, usableDistance)
-	local startFade = math.clamp((distanceAlongPath - START_OFFSET) / START_FADE_DISTANCE, 0, 1)
-	local endFade = math.clamp((usableDistance - distanceAlongPath) / END_FADE_DISTANCE, 0, 1)
-	return math.min(startFade, endFade)
-end
-
-local function applyBreadcrumbFade(breadcrumb, distanceAlongPath, usableDistance)
-	if distanceAlongPath > usableDistance then
-		breadcrumb.label.TextTransparency = 1
-		breadcrumb.label.TextStrokeTransparency = 1
-		return
-	end
-
-	local fade = getEndpointFade(distanceAlongPath, usableDistance)
-	local textTransparency = 1 - (0.82 * fade)
-	local strokeTransparency = 1 - (0.38 * fade)
-	breadcrumb.label.TextTransparency = textTransparency
-	breadcrumb.label.TextStrokeTransparency = strokeTransparency
-end
-
-local function setBreadcrumbCount(folder, count, fadeIn, fadeOut)
+local function setBreadcrumbCount(folder, count)
 	while #activeBreadcrumbs < count do
 		local breadcrumb = createBreadcrumb(folder)
 		table.insert(activeBreadcrumbs, breadcrumb)
 	end
 
 	while #activeBreadcrumbs > count do
-		fadeRemoveBreadcrumb(#activeBreadcrumbs, fadeOut)
+		destroyBreadcrumb(#activeBreadcrumbs)
 	end
 end
 
@@ -506,7 +416,7 @@ local function playFeedback(failedCost)
 		return
 	end
 
-	local target, targetText = selectGuideTarget(root.Position)
+	local target = selectGuideTarget(root.Position)
 	if not target then
 		local label = createFallbackMessage(COLLECT_TEXT)
 		tween(label, fadeIn, { BackgroundTransparency = 0.15, TextTransparency = 0 })
@@ -518,12 +428,6 @@ local function playFeedback(failedCost)
 	trailFolder.Name = "LocalInsufficientPartsGuide"
 	trailFolder.Parent = Workspace
 
-	if targetText == CLICK_TEXT then
-		local panelLabel, panelStroke = createTargetPanel(target, targetText)
-		tween(panelLabel, fadeIn, { BackgroundTransparency = 0.12, TextTransparency = 0 })
-		tween(panelStroke, fadeIn, { Transparency = 0.25 })
-	end
-
 	local startedAt = os.clock()
 	connect(RunService.RenderStepped:Connect(function()
 		if token ~= activeToken then
@@ -531,8 +435,7 @@ local function playFeedback(failedCost)
 		end
 
 		local currentRoot = getCharacterRoot()
-		local camera = Workspace.CurrentCamera
-		if not currentRoot or not target.Parent or not camera then
+		if not currentRoot or not target.Parent then
 			stopGuide()
 			return
 		end
@@ -543,36 +446,33 @@ local function playFeedback(failedCost)
 		local distance = pathOffset.Magnitude
 		local usableDistance = distance - TARGET_CLEARANCE
 		if usableDistance < START_OFFSET then
-			setBreadcrumbCount(trailFolder, 0, fadeIn, fadeOut)
+			setBreadcrumbCount(trailFolder, 0)
 			return
 		end
 
-		local desiredCount = math.clamp(math.floor((usableDistance - START_OFFSET) / STUDS_PER_ARROW) + 2, 1, MAX_ARROW_COUNT)
+		local desiredCount = math.clamp(math.floor((usableDistance - START_OFFSET) / STUDS_PER_ARROW) + 1, 1, MAX_ARROW_COUNT)
 		if desiredCount < MIN_ARROW_COUNT and usableDistance >= START_OFFSET + (STUDS_PER_ARROW * (MIN_ARROW_COUNT - 1)) then
 			desiredCount = MIN_ARROW_COUNT
 		end
-		setBreadcrumbCount(trailFolder, desiredCount, fadeIn, fadeOut)
+		setBreadcrumbCount(trailFolder, desiredCount)
 
 		local direction = pathOffset.Unit
+		local horizontalDirection = Vector3.new(direction.X, 0, direction.Z)
+		if horizontalDirection.Magnitude > 0.001 then
+			horizontalDirection = horizontalDirection.Unit
+		else
+			horizontalDirection = Vector3.new(1, 0, 0)
+		end
+		local markerBack = horizontalDirection:Cross(Vector3.yAxis)
 		local flowOffset = ((os.clock() - startedAt) * ARROW_FLOW_STUDS_PER_SECOND) % STUDS_PER_ARROW
 		for index, breadcrumb in activeBreadcrumbs do
 			local distanceAlongPath = START_OFFSET + flowOffset + (STUDS_PER_ARROW * (index - 1))
 
 			local clampedDistance = math.min(distanceAlongPath, usableDistance)
 			local position = startPosition + (direction * clampedDistance)
-			breadcrumb.anchor.CFrame = CFrame.new(position)
-			applyBreadcrumbFade(breadcrumb, distanceAlongPath, usableDistance)
-
-			local screenPosition = camera:WorldToViewportPoint(position)
-			local targetScreenPosition = camera:WorldToViewportPoint(targetPosition)
-			local screenDirection = Vector2.new(
-				targetScreenPosition.X - screenPosition.X,
-				targetScreenPosition.Y - screenPosition.Y
-			)
-
-			if screenDirection.Magnitude > 0.01 then
-				breadcrumb.label.Rotation = math.deg(math.atan2(screenDirection.Y, screenDirection.X)) - ARROW_SCREEN_ROTATION_OFFSET
-			end
+			breadcrumb.anchor.CFrame = CFrame.fromMatrix(position, horizontalDirection, Vector3.yAxis, markerBack)
+			breadcrumb.surfaceGui.Enabled = distanceAlongPath <= usableDistance
+			breadcrumb.image.ImageTransparency = 0
 		end
 	end))
 
