@@ -11,6 +11,7 @@ local DEBUG_PREFIX = "[PhysicalScrapyardLoop]"
 local ENABLE_DEBUG_LOGS = false
 local PART_CLICK_REWARD = 1
 local CLICK_DEBOUNCE_SECONDS = 0.08
+local FREE_BUILD_TESTING = true -- TEMPORARY: set false to restore normal Parts checks and deductions.
 local BUTTON_COLORS = {
 	CannotAfford = Color3.fromRGB(220, 64, 64),
 	CanAfford = Color3.fromRGB(67, 201, 112),
@@ -1423,7 +1424,7 @@ updateButtonAffordability = function()
 		local button = buttonsByName[step.buttonName]
 		if button and not purchasedButtons[step.buttonName] then
 			configuredButtons[button] = true
-			local cost = button:GetAttribute("BuildCost") or step.cost
+			local cost = FREE_BUILD_TESTING and 0 or (button:GetAttribute("BuildCost") or step.cost)
 			if typeof(cost) == "number" and partsValue >= cost then
 				setButtonColor(button, BUTTON_COLORS.CanAfford)
 			else
@@ -1434,7 +1435,7 @@ updateButtonAffordability = function()
 
 	for _, button in CollectionService:GetTagged("Button") do
 		if not configuredButtons[button] and button:GetAttribute("Purchased") ~= true then
-			local cost = getButtonBuildCost(button)
+			local cost = FREE_BUILD_TESTING and 0 or getButtonBuildCost(button)
 			if typeof(cost) == "number" and partsValue >= cost then
 				setButtonPanelBorderColor(button, BUTTON_COLORS.CanAfford)
 			else
@@ -1546,7 +1547,7 @@ local function purchaseBuildStep(player, step)
 		return
 	end
 
-	local cost = button:GetAttribute("BuildCost") or step.cost
+	local cost = FREE_BUILD_TESTING and 0 or (button:GetAttribute("BuildCost") or step.cost)
 	if typeof(cost) ~= "number" then
 		warn(string.format("%s %s has nonnumeric BuildCost; purchase blocked", DEBUG_PREFIX, step.buttonName))
 		showInsufficientPartsFeedback(player, nil)

@@ -99,52 +99,6 @@ local function tweenPivot(object, targetCFrame, tweenInfo)
 	value:Destroy()
 end
 
-local function getIndependentMovingRoots(candidates)
-	local roots = {}
-	for _, object in candidates do
-		local nested = false
-		for _, other in candidates do
-			if object ~= other and object:IsDescendantOf(other) then
-				nested = true
-				break
-			end
-		end
-		if not nested then
-			table.insert(roots, object)
-		end
-	end
-
-	return roots
-end
-
-local function tweenExtensionAndFollowers(extensionPart, targetSize, targetCFrame, followerTargets, tweenInfo)
-	local startSize = extensionPart.Size
-	local startCFrame = extensionPart.CFrame
-	local followerStarts = {}
-	for object in followerTargets do
-		followerStarts[object] = getPivot(object)
-	end
-
-	local alpha = Instance.new("NumberValue")
-	local connection = alpha:GetPropertyChangedSignal("Value"):Connect(function()
-		local progress = alpha.Value
-		if extensionPart.Parent then
-			extensionPart.Size = startSize:Lerp(targetSize, progress)
-			extensionPart.CFrame = startCFrame:Lerp(targetCFrame, progress)
-		end
-		for object, target in followerTargets do
-			if object.Parent then
-				pivotTo(object, followerStarts[object]:Lerp(target, progress))
-			end
-		end
-	end)
-	local movement = TweenService:Create(alpha, tweenInfo, { Value = 1 })
-	movement:Play()
-	movement.Completed:Wait()
-	connection:Disconnect()
-	alpha:Destroy()
-end
-
 local function getExtensionAxis(extensionPart, targetPosition)
 	local towardTarget = targetPosition - extensionPart.Position
 	towardTarget = Vector3.new(towardTarget.X, 0, towardTarget.Z)
@@ -276,6 +230,8 @@ if not scrapyard or not unlockObjects then
 end
 
 local crane = unlockObjects:FindFirstChild("Crane")
+local craneBase = crane and crane:FindFirstChild("CraneBase")
+local mainCraneBasePart = craneBase and craneBase:FindFirstChild("MainCraneBasePart")
 local crusher = unlockObjects:FindFirstChild("Crusher")
 local brokenCars = unlockObjects:FindFirstChild("BrokenCars")
 local crushableCar = brokenCars and brokenCars:FindFirstChild("CrushableCar")
@@ -290,6 +246,8 @@ local collector = findDescendantByName(crusher, "CrusherCollector")
 
 local requiredObjects = {
 	{ name = "Crane", object = crane },
+	{ name = "Crane.CraneBase", object = craneBase },
+	{ name = "Crane.CraneBase.MainCraneBasePart", object = mainCraneBasePart },
 	{ name = "Crusher", object = crusher },
 	{ name = "CrushableCar", object = crushableCar },
 	{ name = "CraneExtension", object = extension },
@@ -308,7 +266,12 @@ for _, requiredObject in requiredObjects do
 end
 
 if not crane:IsA("Model") then
-	warnLoop("UnlockObjects.Crane must be a Model so it can rotate around its existing pivot")
+	warnLoop("UnlockObjects.Crane must be a Model")
+	return
+end
+
+if not mainCraneBasePart:IsA("BasePart") then
+	warnLoop("Workspace.Scrapyard.UnlockObjects.Crane.CraneBase.MainCraneBasePart must be a BasePart")
 	return
 end
 
@@ -317,7 +280,6 @@ if not extension:IsA("BasePart") then
 	return
 end
 
-local followerRoots = getIndependentMovingRoots({ chain, magnet })
 local cranePromptPart = getFirstBasePart(cranePromptPoint)
 local magnetPart = getFirstBasePart(magnet)
 local carPart = getFirstBasePart(crushableCar)
@@ -328,6 +290,7 @@ if not cranePromptPart or not magnetPart or not carPart or not collectorPart the
 end
 
 diagnostic(string.format("resolved CranePromptPoint=%s; prompt part=%s", cranePromptPoint:GetFullName(), cranePromptPart:GetFullName()))
+diagnostic(string.format("resolved MainCraneBasePart=%s", mainCraneBasePart:GetFullName()))
 
 local buttons = {}
 for _, buttonName in REQUIRED_BUTTON_NAMES do
@@ -433,22 +396,87 @@ for _, buttonName in REQUIRED_BUTTON_NAMES do
 end
 scheduleCranePromptRefresh()
 
-local function rotateCraneTowardDropPoint()
-	local cranePivot = crane:GetPivot()
-	local pivotPosition = cranePivot.Position
-	local currentDirection = getPivot(magnet).Position - pivotPosition
-	local desiredDirection = getPivot(dropPoint).Position - pivotPosition
-	currentDirection = Vector3.new(currentDirection.X, 0, currentDirection.Z)
-	desiredDirection = Vector3.new(desiredDirection.X, 0, desiredDirection.Z)
-	if currentDirection.Magnitude < 0.001 or desiredDirection.Magnitude < 0.001 then
-		return
+local function addBaseParts(object, parts)
+	if object:IsA("BasePart") then
+		parts[object] = true
+	end
+	for _, descendant in object:GetDescendants() do
+		if descendant:IsA("BasePart") then
+			parts[descendant] = true
+		end
+	end
+end
+
+local function captureCraneRestState(extensionDimension)
+	local baseCFrame = mainCraneBasePart.CFrame
+	local relativeCFrames = {}
+	for _, descendant in crane:GetDescendants() do
+		if descendant:IsA("BasePart") then
+			relativeCFrames[descendant] = baseCFrame:ToObjectSpace(descendant.CFrame)
+		end
 	end
 
-	currentDirection = currentDirection.Unit
-	desiredDirection = desiredDirection.Unit
-	local yaw = math.atan2(currentDirection:Cross(desiredDirection).Y, currentDirection:Dot(desiredDirection))
-	local rotation = CFrame.new(pivotPosition) * CFrame.Angles(0, yaw, 0) * CFrame.new(-pivotPosition)
-	tweenPivot(crane, rotation * cranePivot, TweenInfo.new(ROTATE_SECONDS, Enum.EasingStyle.Quad, Enum.EasingDirection.InOut))
+	local followerParts = {}
+	addBaseParts(chain, followerParts)
+	addBaseParts(magnet, followerParts)
+
+	return {
+		baseCFrame = baseCFrame,
+		relativeCFrames = relativeCFrames,
+		followerParts = followerParts,
+		extensionDimension = extensionDimension,
+		extensionSize = extension.Size,
+		extensionLength = getSizeDimension(extension.Size, extensionDimension),
+	}
+end
+
+local function applyCranePose(restState, yaw, extensionDistance, outwardAxisLocal, attachmentTransform)
+	local rotatedBase = restState.baseCFrame * CFrame.Angles(0, yaw, 0)
+	local followerOffset = outwardAxisLocal * extensionDistance
+	for part, relativeCFrame in restState.relativeCFrames do
+		if part.Parent and part ~= mainCraneBasePart then
+			local offset = Vector3.zero
+			if part == extension then
+				offset = followerOffset * 0.5
+			elseif restState.followerParts[part] then
+				offset = followerOffset
+			end
+			part.CFrame = rotatedBase * CFrame.new(offset) * relativeCFrame
+		end
+	end
+
+	if extension.Parent then
+		extension.Size = withExtendedDimension(
+			restState.extensionSize,
+			restState.extensionDimension,
+			restState.extensionLength + extensionDistance
+		)
+	end
+	mainCraneBasePart.CFrame = restState.baseCFrame
+
+	if attachmentTransform and crushableCar and crushableCar.Parent and magnetPart.Parent then
+		pivotTo(crushableCar, magnetPart.CFrame * attachmentTransform)
+	end
+end
+
+local function animateCranePose(restState, startYaw, targetYaw, startExtension, targetExtension, outwardAxisLocal, duration, attachmentTransform)
+	local alpha = Instance.new("NumberValue")
+	local connection = alpha:GetPropertyChangedSignal("Value"):Connect(function()
+		local progress = alpha.Value
+		applyCranePose(
+			restState,
+			startYaw + ((targetYaw - startYaw) * progress),
+			startExtension + ((targetExtension - startExtension) * progress),
+			outwardAxisLocal,
+			attachmentTransform
+		)
+	end)
+	local movement = TweenService:Create(alpha, TweenInfo.new(duration, Enum.EasingStyle.Quad, Enum.EasingDirection.InOut), { Value = 1 })
+	movement:Play()
+	movement.Completed:Wait()
+	connection:Disconnect()
+	alpha:Destroy()
+	applyCranePose(restState, targetYaw, targetExtension, outwardAxisLocal, attachmentTransform)
 end
 
 local function throwCarIntoCrusher()
@@ -558,38 +586,17 @@ local function respawnCarAfterCountdown(completedCycleId)
 end
 
 local function runSequence()
-	local restState = {
-		cranePivot = crane:GetPivot(),
-		extensionSize = extension.Size,
-		extensionCFrame = extension.CFrame,
-		chainPivot = getPivot(chain),
-		magnetPivot = getPivot(magnet),
-		followerPivots = {},
-	}
-	for _, object in followerRoots do
-		restState.followerPivots[object] = getPivot(object)
-	end
 	collectorPrompt.Enabled = false
 	setCarAnimationState(crushableCar)
 
 	local magnetBounds = getBounds(magnet)
 	local carBounds = getBounds(crushableCar)
 	local extensionDimension, extensionAxis = getExtensionAxis(extension, carBounds.Position)
+	local restState = captureCraneRestState(extensionDimension)
+	local outwardAxisLocal = restState.baseCFrame:VectorToObjectSpace(extensionAxis)
+	diagnostic(string.format("rotation center=%s", tostring(restState.baseCFrame.Position)))
 	local extensionDistance = math.max(0, (carBounds.Position - magnetBounds.Position):Dot(extensionAxis))
-	local originalLength = getSizeDimension(restState.extensionSize, extensionDimension)
-	local extendedSize = withExtendedDimension(restState.extensionSize, extensionDimension, originalLength + extensionDistance)
-	local extendedCFrame = restState.extensionCFrame + (extensionAxis * extensionDistance * 0.5)
-	local extendedFollowerTargets = {}
-	for _, object in followerRoots do
-		extendedFollowerTargets[object] = restState.followerPivots[object] + (extensionAxis * extensionDistance)
-	end
-	tweenExtensionAndFollowers(
-		extension,
-		extendedSize,
-		extendedCFrame,
-		extendedFollowerTargets,
-		TweenInfo.new(EXTEND_SECONDS, Enum.EasingStyle.Quad, Enum.EasingDirection.InOut)
-	)
+	animateCranePose(restState, 0, 0, 0, extensionDistance, outwardAxisLocal, EXTEND_SECONDS, nil)
 
 	local magnetSize
 	local carSize
@@ -597,39 +604,67 @@ local function runSequence()
 	carBounds, carSize = getBounds(crushableCar)
 	local magnetBottom = magnetBounds.Position - (magnetBounds.UpVector * magnetSize.Y * 0.5)
 	local carRoof = carBounds.Position + (carBounds.UpVector * carSize.Y * 0.5)
-	local liftOffset = Vector3.new(0, magnetBottom.Y - carRoof.Y, 0)
+	local liftOffset = magnetBottom - carRoof
 	tweenPivot(crushableCar, getPivot(crushableCar) + liftOffset, TweenInfo.new(LIFT_SECONDS, Enum.EasingStyle.Quad, Enum.EasingDirection.InOut))
 
-	local originalParent = crushableCar.Parent
-	crushableCar.Parent = crane
-	local attachment = Instance.new("WeldConstraint")
-	attachment.Name = "TemporaryCraneMagnetAttachment"
-	attachment.Part0 = magnetPart
-	attachment.Part1 = carPart
-	attachment.Parent = magnetPart
+	local attachmentTransform = magnetPart.CFrame:ToObjectSpace(getPivot(crushableCar))
+	carBounds = getBounds(crushableCar)
+	local dropPosition = getPivot(dropPoint).Position
+	local currentDirection = restState.baseCFrame:PointToObjectSpace(carBounds.Position)
+	local desiredDirection = restState.baseCFrame:PointToObjectSpace(dropPosition)
+	currentDirection = Vector3.new(currentDirection.X, 0, currentDirection.Z)
+	desiredDirection = Vector3.new(desiredDirection.X, 0, desiredDirection.Z)
+	local yaw = 0
+	if currentDirection.Magnitude >= 0.001 and desiredDirection.Magnitude >= 0.001 then
+		currentDirection = currentDirection.Unit
+		desiredDirection = desiredDirection.Unit
+		yaw = math.atan2(currentDirection:Cross(desiredDirection).Y, currentDirection:Dot(desiredDirection))
+	end
 
-	rotateCraneTowardDropPoint()
+	local rotatedBase = restState.baseCFrame * CFrame.Angles(0, yaw, 0)
+	local carCenterLocal = restState.baseCFrame:PointToObjectSpace(carBounds.Position)
+	local rotatedCarCenter = rotatedBase:PointToWorldSpace(carCenterLocal)
+	local rotatedOutwardAxis = rotatedBase:VectorToWorldSpace(outwardAxisLocal)
+	local horizontalOutwardAxis = Vector3.new(rotatedOutwardAxis.X, 0, rotatedOutwardAxis.Z)
+	local extensionAdjustment = 0
+	if horizontalOutwardAxis.Magnitude >= 0.001 then
+		horizontalOutwardAxis = horizontalOutwardAxis.Unit
+		local horizontalTargetOffset = Vector3.new(
+			dropPosition.X - rotatedCarCenter.X,
+			0,
+			dropPosition.Z - rotatedCarCenter.Z
+		)
+		extensionAdjustment = horizontalTargetOffset:Dot(horizontalOutwardAxis)
+	end
+	local targetExtensionDistance = math.max(
+		-restState.extensionLength + 0.05,
+		extensionDistance + extensionAdjustment
+	)
 
-	attachment:Destroy()
-	crushableCar.Parent = originalParent
+	animateCranePose(
+		restState,
+		0,
+		yaw,
+		extensionDistance,
+		targetExtensionDistance,
+		outwardAxisLocal,
+		ROTATE_SECONDS,
+		attachmentTransform
+	)
+	magnetBounds = getBounds(magnet)
+	carBounds = getBounds(crushableCar)
+	local assemblyPosition = (magnetBounds.Position + carBounds.Position) * 0.5
+	local finalHorizontalDistance = (Vector3.new(assemblyPosition.X, 0, assemblyPosition.Z) - Vector3.new(dropPosition.X, 0, dropPosition.Z)).Magnitude
+	diagnostic(string.format("magnet position=%s; attached car position=%s", tostring(magnetBounds.Position), tostring(carBounds.Position)))
+	diagnostic(string.format("final horizontal assembly distance to CrusherDropPoint=%.3f", finalHorizontalDistance))
+
 	throwCarIntoCrusher()
 	crushableCar:Destroy()
 	crushableCar = nil
 	carPart = nil
 
 	collectorPrompt.Enabled = false
-	tweenPivot(crane, restState.cranePivot, TweenInfo.new(ROTATE_SECONDS, Enum.EasingStyle.Quad, Enum.EasingDirection.InOut))
-	tweenExtensionAndFollowers(
-		extension,
-		restState.extensionSize,
-		restState.extensionCFrame,
-		restState.followerPivots,
-		TweenInfo.new(EXTEND_SECONDS, Enum.EasingStyle.Quad, Enum.EasingDirection.InOut)
-	)
-	extension.Size = restState.extensionSize
-	extension.CFrame = restState.extensionCFrame
-	pivotTo(chain, restState.chainPivot)
-	pivotTo(magnet, restState.magnetPivot)
+	animateCranePose(restState, yaw, 0, targetExtensionDistance, 0, outwardAxisLocal, ROTATE_SECONDS, nil)
 
 	sequenceRunning = false
 	rewardPending = true
