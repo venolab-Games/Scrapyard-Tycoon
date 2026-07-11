@@ -12,6 +12,7 @@ local ROTATE_SECONDS = 1.5
 local THROW_SECONDS = 0.9
 local COLLECTOR_DELAY_SECONDS = 2
 local CRUSHER_REWARD_PARTS = 500
+local CAR_RESPAWN_SECONDS = 10
 local ENABLE_PROMPT_DIAGNOSTICS = false -- TEMPORARY: disable after Studio prompt verification.
 
 local REQUIRED_BUTTON_NAMES = {
@@ -229,6 +230,10 @@ local function createPrompt(parent, name, actionText, objectText)
 end
 
 local function getVisibilityDiagnostic(object)
+	if not object then
+		return false, "object is absent"
+	end
+
 	local firstPart = nil
 	local partCount = 0
 	for _, descendant in object:GetDescendants() do
@@ -337,9 +342,15 @@ end
 local cranePrompt = createPrompt(cranePromptPart, "OperateCranePrompt", "Operate Crane", "Crane")
 local collectorPrompt = createPrompt(collectorPart, "CrusherCollectorPrompt", "Collect 500 Parts", "Crusher")
 diagnostic(string.format("created %s under %s with Enabled=%s", cranePrompt:GetFullName(), cranePrompt.Parent:GetFullName(), tostring(cranePrompt.Enabled)))
-local sequenceStarted = false
-local sequenceCompleted = false
-local rewardClaimed = false
+local sequenceRunning = false
+local carReady = true
+local rewardPending = false
+local rewardClaimedThisCycle = false
+local cycleId = 0
+local carTemplate = nil
+local carSpawnParent = nil
+local carSpawnPivot = nil
+local countdownPosition = nil
 local promptRefreshGeneration = 0
 local lastPromptDiagnostic = nil
 
@@ -358,14 +369,22 @@ local function refreshCranePrompt()
 	local crushableCarVisible, crushableCarVisibility = getVisibilityDiagnostic(crushableCar)
 	local craneVisible, craneVisibility = getVisibilityDiagnostic(crane)
 	local crusherVisible, crusherVisibility = getVisibilityDiagnostic(crusher)
-	local shouldEnable = not sequenceStarted and purchasesReady and crushableCarVisible and craneVisible and crusherVisible
+	local shouldEnable = not sequenceRunning
+		and carReady
+		and not rewardPending
+		and purchasesReady
+		and crushableCarVisible
+		and craneVisible
+		and crusherVisible
 	cranePrompt.Enabled = shouldEnable
 
 	local purchaseSummary = {}
 	for _, buttonName in REQUIRED_BUTTON_NAMES do
 		table.insert(purchaseSummary, string.format("%s=%s", buttonName, tostring(buttons[buttonName]:GetAttribute("Purchased") == true)))
 	end
-	local failedCondition = sequenceStarted and "sequence already started"
+	local failedCondition = sequenceRunning and "sequence running"
+		or (not carReady and "fresh CrushableCar not ready")
+		or (rewardPending and "collector reward pending")
 		or (not purchasesReady and "required purchase false")
 		or (not crushableCarVisible and "CrushableCar not visible")
 		or (not craneVisible and "Crane not visible")
@@ -394,7 +413,7 @@ local function scheduleCranePromptRefresh()
 	local generation = promptRefreshGeneration
 	task.spawn(function()
 		for _ = 1, 20 do
-			if generation ~= promptRefreshGeneration or sequenceStarted then
+			if generation ~= promptRefreshGeneration or sequenceRunning then
 				return
 			end
 
@@ -457,6 +476,87 @@ local function throwCarIntoCrusher()
 	alpha:Destroy()
 end
 
+local function captureCarTemplate()
+	if carTemplate then
+		return
+	end
+
+	local originalArchivable = crushableCar.Archivable
+	crushableCar.Archivable = true
+	carTemplate = crushableCar:Clone()
+	crushableCar.Archivable = originalArchivable
+	carTemplate.Parent = nil
+	carSpawnParent = crushableCar.Parent
+	carSpawnPivot = getPivot(crushableCar)
+	local spawnBounds, spawnSize = getBounds(crushableCar)
+	countdownPosition = spawnBounds.Position + Vector3.new(0, (spawnSize.Y * 0.5) + 2, 0)
+end
+
+local function createRespawnCountdown()
+	local anchor = Instance.new("Part")
+	anchor.Name = "CrushableCarRespawnCountdownAnchor"
+	anchor.Anchored = true
+	anchor.CanCollide = false
+	anchor.CanTouch = false
+	anchor.CanQuery = false
+	anchor.CastShadow = false
+	anchor.Massless = true
+	anchor.Size = Vector3.new(0.1, 0.1, 0.1)
+	anchor.Transparency = 1
+	anchor.CFrame = CFrame.new(countdownPosition)
+	anchor.Parent = Workspace
+
+	local billboard = Instance.new("BillboardGui")
+	billboard.Name = "CrushableCarRespawnCountdown"
+	billboard.Adornee = anchor
+	billboard.AlwaysOnTop = false
+	billboard.LightInfluence = 0
+	billboard.MaxDistance = 250
+	billboard.Size = UDim2.fromOffset(64, 28)
+	billboard.Parent = anchor
+
+	local label = Instance.new("TextLabel")
+	label.Name = "Countdown"
+	label.BackgroundTransparency = 1
+	label.Font = Enum.Font.GothamBold
+	label.Size = UDim2.fromScale(1, 1)
+	label.TextColor3 = Color3.new(1, 1, 1)
+	label.TextScaled = true
+	label.TextStrokeTransparency = 0.45
+	label.Parent = billboard
+
+	return anchor, label
+end
+
+local function respawnCarAfterCountdown(completedCycleId)
+	task.spawn(function()
+		local countdownAnchor, countdownLabel = createRespawnCountdown()
+		for seconds = CAR_RESPAWN_SECONDS, 1, -1 do
+			if completedCycleId ~= cycleId then
+				countdownAnchor:Destroy()
+				return
+			end
+			countdownLabel.Text = string.format("%ds", seconds)
+			task.wait(1)
+		end
+
+		if completedCycleId ~= cycleId then
+			countdownAnchor:Destroy()
+			return
+		end
+
+		local freshCar = carTemplate:Clone()
+		freshCar.Name = "CrushableCar"
+		freshCar.Parent = carSpawnParent
+		pivotTo(freshCar, carSpawnPivot)
+		crushableCar = freshCar
+		carPart = getFirstBasePart(freshCar)
+		carReady = carPart ~= nil
+		countdownAnchor:Destroy()
+		refreshCranePrompt()
+	end)
+end
+
 local function runSequence()
 	local restState = {
 		cranePivot = crane:GetPivot(),
@@ -514,6 +614,8 @@ local function runSequence()
 	crushableCar.Parent = originalParent
 	throwCarIntoCrusher()
 	crushableCar:Destroy()
+	crushableCar = nil
+	carPart = nil
 
 	collectorPrompt.Enabled = false
 	tweenPivot(crane, restState.cranePivot, TweenInfo.new(ROTATE_SECONDS, Enum.EasingStyle.Quad, Enum.EasingDirection.InOut))
@@ -529,19 +631,26 @@ local function runSequence()
 	pivotTo(chain, restState.chainPivot)
 	pivotTo(magnet, restState.magnetPivot)
 
-	sequenceCompleted = true
+	sequenceRunning = false
+	rewardPending = true
+	rewardClaimedThisCycle = false
+	local completedCycleId = cycleId
+	respawnCarAfterCountdown(completedCycleId)
 	task.wait(COLLECTOR_DELAY_SECONDS)
-	if not rewardClaimed and collectorPrompt.Parent then
+	if completedCycleId == cycleId and rewardPending and not rewardClaimedThisCycle and collectorPrompt.Parent then
 		collectorPrompt.Enabled = true
 	end
 end
 
 cranePrompt.Triggered:Connect(function()
-	if sequenceStarted or not purchasesComplete() then
+	if sequenceRunning or not carReady or rewardPending or not crushableCar or not purchasesComplete() then
 		return
 	end
 
-	sequenceStarted = true
+	captureCarTemplate()
+	cycleId += 1
+	sequenceRunning = true
+	carReady = false
 	cranePrompt.Enabled = false
 	task.spawn(function()
 		local ok, failure = xpcall(runSequence, debug.traceback)
@@ -552,7 +661,7 @@ cranePrompt.Triggered:Connect(function()
 end)
 
 collectorPrompt.Triggered:Connect(function(player)
-	if rewardClaimed or not sequenceCompleted or not collectorPrompt.Enabled then
+	if rewardClaimedThisCycle or not rewardPending or not collectorPrompt.Enabled then
 		return
 	end
 
@@ -563,8 +672,9 @@ collectorPrompt.Triggered:Connect(function(player)
 		return
 	end
 
-	rewardClaimed = true
+	rewardClaimedThisCycle = true
+	rewardPending = false
 	collectorPrompt.Enabled = false
 	parts.Value += CRUSHER_REWARD_PARTS
-	collectorPrompt:Destroy()
+	refreshCranePrompt()
 end)

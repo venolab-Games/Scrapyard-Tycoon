@@ -11,7 +11,7 @@ local DEBUG_PREFIX = "[PhysicalScrapyardLoop]"
 local ENABLE_DEBUG_LOGS = false
 local PART_CLICK_REWARD = 1
 local CLICK_DEBOUNCE_SECONDS = 0.08
-local FREE_BUILD_TESTING = false -- TEMPORARY: set false to restore normal Parts checks and deductions.
+local FREE_BUILD_TESTING = true -- TEMPORARY: set false to restore normal Parts checks and deductions.
 
 local BUTTON_COLORS = {
 	CannotAfford = Color3.fromRGB(220, 64, 64),
