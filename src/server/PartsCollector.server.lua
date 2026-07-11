@@ -4,6 +4,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TweenService = game:GetService("TweenService")
 local Workspace = game:GetService("Workspace")
 
+local BrokenCarProduction = require(ReplicatedStorage.Shared.BrokenCarProduction)
 local CurrencyConfig = require(ReplicatedStorage.Shared.CurrencyConfig)
 
 local DEBUG_PREFIX = "[PartsCollector]"
@@ -14,25 +15,6 @@ local MAX_STORED_PARTS = 999999
 local COLLECT_DEBOUNCE_SECONDS = 0.75
 local COLLECT_FLASH_SECONDS = 0.18
 local COLLECT_POPUP_SECONDS = 0.8
-local BROKEN_CAR_PRODUCTION = {
-	{ name = "BrokenCar_01", partsPerTick = 1 },
-	{ name = "BrokenCar_02", partsPerTick = 1 },
-	{ name = "BrokenCar_03", partsPerTick = 1 },
-	{ name = "BrokenCar_04", partsPerTick = 2 },
-	{ name = "BrokenCar_05", partsPerTick = 2 },
-	{ name = "BrokenCar_06", partsPerTick = 2 },
-	{ name = "BrokenCar_07", partsPerTick = 2 },
-	{ name = "BrokenCar_08", partsPerTick = 3 },
-	{ name = "BrokenCar_09", partsPerTick = 3 },
-	{ name = "BrokenCar_10", partsPerTick = 3 },
-	{ name = "BrokenCar_11", partsPerTick = 3 },
-}
-local BROKEN_CAR_PARTS_PER_TICK = {}
-
-for _, config in BROKEN_CAR_PRODUCTION do
-	BROKEN_CAR_PARTS_PER_TICK[config.name] = config.partsPerTick
-end
-
 local collectDebounces = {}
 local counterValueLabels = {}
 local activeBrokenCarLoops = {}
@@ -300,7 +282,7 @@ local function getScrapyardIncomeMultiplier()
 end
 
 local function getBrokenCarBasePartsPerTick(brokenCar)
-	local configuredPartsPerTick = BROKEN_CAR_PARTS_PER_TICK[brokenCar.Name]
+	local configuredPartsPerTick = BrokenCarProduction.PartsPerSecondByName[brokenCar.Name]
 	if typeof(configuredPartsPerTick) == "number" and configuredPartsPerTick > 0 then
 		return configuredPartsPerTick
 	end
@@ -417,7 +399,7 @@ local function watchBrokenCars(collector)
 		return
 	end
 
-	for _, config in BROKEN_CAR_PRODUCTION do
+	for _, config in BrokenCarProduction.Production do
 		local brokenCar = brokenCarsFolder:FindFirstChild(config.name)
 		if brokenCar then
 			watchBrokenCarIncome(collector, brokenCar)
