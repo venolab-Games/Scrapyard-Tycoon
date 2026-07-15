@@ -6,6 +6,7 @@ local Workspace = game:GetService("Workspace")
 
 local BrokenCarProduction = require(ReplicatedStorage.Shared.BrokenCarProduction)
 local CurrencyConfig = require(ReplicatedStorage.Shared.CurrencyConfig)
+local WorkspaceExclusions = require(ReplicatedStorage.Shared.WorkspaceExclusions)
 
 local DEBUG_PREFIX = "[PartsCollector]"
 local ENABLE_DEBUG_LOGS = false
@@ -55,7 +56,10 @@ end
 
 local function getTaggedCollectPad(collector)
 	for _, taggedPad in CollectionService:GetTagged("CollectPad") do
-		if taggedPad:IsA("BasePart") and taggedPad:IsDescendantOf(collector) then
+		if not WorkspaceExclusions.IsExcluded(taggedPad)
+			and taggedPad:IsA("BasePart")
+			and taggedPad:IsDescendantOf(collector)
+		then
 			return taggedPad
 		end
 	end
@@ -454,6 +458,10 @@ local function connectCollectPad(collector, collectPad)
 end
 
 local function setupCollector(collector)
+	if WorkspaceExclusions.IsExcluded(collector) then
+		return
+	end
+
 	log(string.format("collector found: %s", collector:GetFullName()))
 
 	local collectPad = findCollectPad(collector)
@@ -475,7 +483,9 @@ local function setupCollector(collector)
 end
 
 for _, collector in CollectionService:GetTagged("Collector") do
-	setupCollector(collector)
+	if not WorkspaceExclusions.IsExcluded(collector) then
+		setupCollector(collector)
+	end
 end
 
 Players.PlayerAdded:Connect(function(player)

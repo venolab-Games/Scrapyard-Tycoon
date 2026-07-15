@@ -6,6 +6,7 @@ local Workspace = game:GetService("Workspace")
 
 local BrokenCarProduction = require(ReplicatedStorage.Shared.BrokenCarProduction)
 local CurrencyConfig = require(ReplicatedStorage.Shared.CurrencyConfig)
+local WorkspaceExclusions = require(ReplicatedStorage.Shared.WorkspaceExclusions)
 
 local DEBUG_PREFIX = "[PhysicalScrapyardLoop]"
 local ENABLE_DEBUG_LOGS = false
@@ -318,6 +319,10 @@ local function scanTaggedButtons()
 	debugLog(string.format("found %d tagged Button instances", #taggedButtons))
 
 	for _, button in taggedButtons do
+		if WorkspaceExclusions.IsExcluded(button) then
+			continue
+		end
+
 		if taggedButtonsByName[button.Name] then
 			warn(string.format("%s Duplicate Button tag name '%s': %s and %s", DEBUG_PREFIX, button.Name, taggedButtonsByName[button.Name]:GetFullName(), button:GetFullName()))
 		else
@@ -353,7 +358,7 @@ local function getParts(player)
 end
 
 local function findDescendantByName(root, name)
-	if not root then
+	if not root or WorkspaceExclusions.IsExcluded(root) then
 		return nil
 	end
 
@@ -361,16 +366,26 @@ local function findDescendantByName(root, name)
 		return root
 	end
 
-	return root:FindFirstChild(name, true)
+	for _, descendant in root:GetDescendants() do
+		if descendant.Name == name and not WorkspaceExclusions.IsExcluded(descendant) then
+			return descendant
+		end
+	end
+
+	return nil
 end
 
 local function getDescendantsByName(root)
 	local descendantsByName = {}
-	if not root then
+	if not root or WorkspaceExclusions.IsExcluded(root) then
 		return descendantsByName
 	end
 
 	for _, descendant in root:GetDescendants() do
+		if WorkspaceExclusions.IsExcluded(descendant) then
+			continue
+		end
+
 		local matches = descendantsByName[descendant.Name]
 		if not matches then
 			matches = {}
@@ -384,6 +399,10 @@ local function getDescendantsByName(root)
 end
 
 local function findAncestorByName(instance, name)
+	if WorkspaceExclusions.IsExcluded(instance) then
+		return nil
+	end
+
 	local current = instance
 	while current and current ~= Workspace do
 		if current.Name == name then
@@ -449,7 +468,7 @@ local function findUnlockObjectMatches(objectName)
 	end
 
 	for _, descendant in currentUnlockObjects:GetDescendants() do
-		if descendant.Name == objectName then
+		if descendant.Name == objectName and not WorkspaceExclusions.IsExcluded(descendant) then
 			table.insert(matches, descendant)
 		end
 	end
@@ -622,12 +641,12 @@ end
 
 local function countNamedDescendants(root, objectName)
 	local count = 0
-	if not root then
+	if not root or WorkspaceExclusions.IsExcluded(root) then
 		return count
 	end
 
 	for _, descendant in root:GetDescendants() do
-		if descendant.Name == objectName then
+		if descendant.Name == objectName and not WorkspaceExclusions.IsExcluded(descendant) then
 			count += 1
 		end
 	end
@@ -796,10 +815,16 @@ local function validateExpansionBrokenCarButtonSetup()
 end
 
 local function eachSelfAndDescendant(instance, callback)
+	if WorkspaceExclusions.IsExcluded(instance) then
+		return
+	end
+
 	callback(instance)
 
 	for _, descendant in instance:GetDescendants() do
-		callback(descendant)
+		if not WorkspaceExclusions.IsExcluded(descendant) then
+			callback(descendant)
+		end
 	end
 end
 
@@ -936,7 +961,21 @@ local function configureButtonLabelSign(sign)
 end
 
 local function getLabelLookTarget(position)
-	local spawnLocation = Workspace:FindFirstChildWhichIsA("SpawnLocation", true)
+	local spawnLocation = nil
+	for _, child in Workspace:GetChildren() do
+		if WorkspaceExclusions.IsExcluded(child) then
+			continue
+		end
+
+		if child:IsA("SpawnLocation") then
+			spawnLocation = child
+		else
+			spawnLocation = child:FindFirstChildWhichIsA("SpawnLocation", true)
+		end
+		if spawnLocation then
+			break
+		end
+	end
 	local targetPosition = spawnLocation and spawnLocation.Position or Vector3.zero
 	targetPosition = Vector3.new(targetPosition.X, position.Y, targetPosition.Z)
 
@@ -1274,7 +1313,10 @@ local function createButtonLabel(button)
 end
 
 local function setupButtonLabel(button)
-	if not button:IsA("Model") or not CollectionService:HasTag(button, "Button") then
+	if WorkspaceExclusions.IsExcluded(button)
+		or not button:IsA("Model")
+		or not CollectionService:HasTag(button, "Button")
+	then
 		return
 	end
 
@@ -1354,10 +1396,16 @@ end
 
 local function setupTaggedButtonLabels()
 	for _, button in CollectionService:GetTagged("Button") do
-		setupButtonLabel(button)
+		if not WorkspaceExclusions.IsExcluded(button) then
+			setupButtonLabel(button)
+		end
 	end
 
 	CollectionService:GetInstanceAddedSignal("Button"):Connect(function(button)
+		if WorkspaceExclusions.IsExcluded(button) then
+			return
+		end
+
 		task.defer(function()
 			setupButtonLabel(button)
 			updateButtonAffordability()
@@ -1434,7 +1482,10 @@ updateButtonAffordability = function()
 	end
 
 	for _, button in CollectionService:GetTagged("Button") do
-		if not configuredButtons[button] and button:GetAttribute("Purchased") ~= true then
+		if not WorkspaceExclusions.IsExcluded(button)
+			and not configuredButtons[button]
+			and button:GetAttribute("Purchased") ~= true
+		then
 			local cost = FREE_BUILD_TESTING and 0 or getButtonBuildCost(button)
 			if typeof(cost) == "number" and partsValue >= cost then
 				setButtonPanelBorderColor(button, BUTTON_COLORS.CanAfford)
@@ -1717,8 +1768,10 @@ end
 
 local function findCarPile()
 	local taggedObjects = CollectionService:GetTagged("PartClickSource")
-	if taggedObjects[1] then
-		return findAncestorByName(taggedObjects[1], "CarPile_Clickable") or taggedObjects[1]
+	for _, taggedObject in taggedObjects do
+		if not WorkspaceExclusions.IsExcluded(taggedObject) then
+			return findAncestorByName(taggedObject, "CarPile_Clickable") or taggedObject
+		end
 	end
 
 	local starterArea = Workspace:FindFirstChild("StarterArea")

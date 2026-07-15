@@ -1,13 +1,16 @@
 local CollectionService = game:GetService("CollectionService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local Workspace = game:GetService("Workspace")
+
+local WorkspaceExclusions = require(ReplicatedStorage.Shared.WorkspaceExclusions)
 
 local SIGN_TAG = "BuildButtonLabelSign"
 
 local trackedSigns = {}
 
 local function trackSign(sign)
-	if sign:IsA("BasePart") then
+	if sign:IsA("BasePart") and not WorkspaceExclusions.IsExcluded(sign) then
 		trackedSigns[sign] = true
 	end
 end
@@ -31,7 +34,7 @@ RunService.RenderStepped:Connect(function()
 
 	local cameraPosition = camera.CFrame.Position
 	for sign in trackedSigns do
-		if not sign.Parent then
+		if not sign.Parent or WorkspaceExclusions.IsExcluded(sign) then
 			trackedSigns[sign] = nil
 			continue
 		end

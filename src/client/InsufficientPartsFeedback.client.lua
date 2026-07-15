@@ -6,6 +6,7 @@ local TweenService = game:GetService("TweenService")
 local Workspace = game:GetService("Workspace")
 
 local CurrencyConfig = require(ReplicatedStorage.Shared.CurrencyConfig)
+local WorkspaceExclusions = require(ReplicatedStorage.Shared.WorkspaceExclusions)
 
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
@@ -136,7 +137,7 @@ local function getPartsValue()
 end
 
 local function getTargetPart(instance)
-	if not instance then
+	if not instance or WorkspaceExclusions.IsExcluded(instance) then
 		return nil
 	end
 
@@ -157,6 +158,10 @@ local function getTargetPart(instance)
 end
 
 local function findAncestorByName(instance, name)
+	if WorkspaceExclusions.IsExcluded(instance) then
+		return nil
+	end
+
 	local current = instance
 	while current and current ~= Workspace do
 		if current.Name == name then
@@ -174,7 +179,7 @@ local function findClosestCollectPad(startPosition)
 	local closestDistance = math.huge
 
 	for _, taggedPad in CollectionService:GetTagged(COLLECT_PAD_TAG) do
-		if taggedPad:IsA("BasePart") then
+		if taggedPad:IsA("BasePart") and not WorkspaceExclusions.IsExcluded(taggedPad) then
 			local distance = (taggedPad.Position - startPosition).Magnitude
 			if distance < closestDistance then
 				closestPad = taggedPad
@@ -193,10 +198,12 @@ end
 
 local function findCarPileTarget()
 	for _, taggedObject in CollectionService:GetTagged(PART_CLICK_SOURCE_TAG) do
-		local carPile = findAncestorByName(taggedObject, "CarPile_Clickable") or taggedObject
-		local targetPart = getTargetPart(carPile)
-		if targetPart then
-			return targetPart
+		if not WorkspaceExclusions.IsExcluded(taggedObject) then
+			local carPile = findAncestorByName(taggedObject, "CarPile_Clickable") or taggedObject
+			local targetPart = getTargetPart(carPile)
+			if targetPart then
+				return targetPart
+			end
 		end
 	end
 
@@ -218,9 +225,11 @@ end
 
 local function hasStoredPartsAvailable()
 	for _, collector in CollectionService:GetTagged(COLLECTOR_TAG) do
-		local storedParts = collector:GetAttribute("StoredParts")
-		if typeof(storedParts) == "number" and storedParts > 0 then
-			return true
+		if not WorkspaceExclusions.IsExcluded(collector) then
+			local storedParts = collector:GetAttribute("StoredParts")
+			if typeof(storedParts) == "number" and storedParts > 0 then
+				return true
+			end
 		end
 	end
 

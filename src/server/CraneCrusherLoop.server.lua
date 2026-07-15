@@ -3,6 +3,7 @@ local TweenService = game:GetService("TweenService")
 local Workspace = game:GetService("Workspace")
 
 local CurrencyConfig = require(ReplicatedStorage.Shared.CurrencyConfig)
+local WorkspaceExclusions = require(ReplicatedStorage.Shared.WorkspaceExclusions)
 
 local DEBUG_PREFIX = "[CraneCrusherLoop]"
 local LOOKUP_WAIT_SECONDS = 5
@@ -10,6 +11,9 @@ local EXTEND_SECONDS = 1.5
 local LIFT_SECONDS = 1.25
 local ROTATE_SECONDS = 1.5
 local THROW_SECONDS = 0.9
+local CRUSH_DURATION_SECONDS = 7
+local CRUSHER_CLOSED_HOLD_SECONDS = 0.75
+local CAR_SPIN_SPEED_DEGREES_PER_SECOND = 180
 local COLLECTOR_DELAY_SECONDS = 2
 local CRUSHER_REWARD_PARTS = 500
 local CAR_RESPAWN_SECONDS = 10
@@ -34,15 +38,21 @@ end
 diagnostic("script startup")
 
 local function findDescendantByName(root, name)
-	if not root then
+	if not root or WorkspaceExclusions.IsExcluded(root) then
 		return nil
 	end
 
-	if root.Name == name then
+	if root.Name == name and not WorkspaceExclusions.IsExcluded(root) then
 		return root
 	end
 
-	return root:FindFirstChild(name, true)
+	for _, descendant in root:GetDescendants() do
+		if descendant.Name == name and not WorkspaceExclusions.IsExcluded(descendant) then
+			return descendant
+		end
+	end
+
+	return nil
 end
 
 local function getPivot(object)
@@ -74,6 +84,10 @@ local function getBounds(object)
 end
 
 local function getFirstBasePart(object)
+	if WorkspaceExclusions.IsExcluded(object) then
+		return nil
+	end
+
 	if object:IsA("BasePart") then
 		return object
 	end
@@ -187,6 +201,9 @@ local function getVisibilityDiagnostic(object)
 	if not object then
 		return false, "object is absent"
 	end
+	if WorkspaceExclusions.IsExcluded(object) then
+		return false, "object is excluded from gameplay"
+	end
 
 	local firstPart = nil
 	local partCount = 0
@@ -243,6 +260,7 @@ local cranePromptPoint = scrapyard:FindFirstChild("CranePromptPoint")
 	or findDescendantByName(unlockObjects, "CranePromptPoint")
 local dropPoint = findDescendantByName(crusher, "CrusherDropPoint")
 local collector = findDescendantByName(crusher, "CrusherCollector")
+local crusherSquasher = findDescendantByName(crusher, "CrusherSquasher")
 
 local requiredObjects = {
 	{ name = "Crane", object = crane },
@@ -256,6 +274,7 @@ local requiredObjects = {
 	{ name = "CranePromptPoint", object = cranePromptPoint },
 	{ name = "CrusherDropPoint", object = dropPoint },
 	{ name = "CrusherCollector", object = collector },
+	{ name = "CrusherSquasher", object = crusherSquasher },
 }
 
 for _, requiredObject in requiredObjects do
@@ -277,6 +296,11 @@ end
 
 if not extension:IsA("BasePart") then
 	warnLoop("CraneExtension must be a BasePart so its placed local-axis Size can animate")
+	return
+end
+
+if not crusherSquasher:IsA("Model") or not getFirstBasePart(crusherSquasher) then
+	warnLoop("CrusherSquasher must be a Model containing at least one BasePart")
 	return
 end
 
@@ -397,11 +421,15 @@ end
 scheduleCranePromptRefresh()
 
 local function addBaseParts(object, parts)
+	if WorkspaceExclusions.IsExcluded(object) then
+		return
+	end
+
 	if object:IsA("BasePart") then
 		parts[object] = true
 	end
 	for _, descendant in object:GetDescendants() do
-		if descendant:IsA("BasePart") then
+		if descendant:IsA("BasePart") and not WorkspaceExclusions.IsExcluded(descendant) then
 			parts[descendant] = true
 		end
 	end
@@ -502,6 +530,359 @@ local function throwCarIntoCrusher()
 	movement.Completed:Wait()
 	connection:Disconnect()
 	alpha:Destroy()
+end
+
+local function captureCrusherRestState()
+	local boundsCFrame = getBounds(crusherSquasher)
+	local center = boundsCFrame.Position
+	local pivot = crusherSquasher:GetPivot()
+	local horizontalAxes = { pivot.RightVector, pivot.LookVector }
+	local parts = {}
+	local leftParts = {}
+	local rightParts = {}
+	local bestAxis = horizontalAxes[1]
+	local lengthAxis = horizontalAxes[2]
+	local bestSpan = -math.huge
+
+	for axisIndex, axis in horizontalAxes do
+		local minimum = math.huge
+		local maximum = -math.huge
+		for _, descendant in crusherSquasher:GetDescendants() do
+			if descendant:IsA("BasePart") then
+				local projection = (descendant.Position - center):Dot(axis)
+				minimum = math.min(minimum, projection)
+				maximum = math.max(maximum, projection)
+			end
+		end
+
+		local span = maximum - minimum
+		if span > bestSpan then
+			bestSpan = span
+			bestAxis = axis
+			lengthAxis = horizontalAxes[axisIndex == 1 and 2 or 1]
+		end
+	end
+
+	local function projectedHalfExtent(part, axis)
+		return 0.5
+			* ((math.abs(axis:Dot(part.CFrame.RightVector)) * part.Size.X)
+				+ (math.abs(axis:Dot(part.CFrame.UpVector)) * part.Size.Y)
+				+ (math.abs(axis:Dot(part.CFrame.LookVector)) * part.Size.Z))
+	end
+
+	for _, descendant in crusherSquasher:GetDescendants() do
+		if descendant:IsA("BasePart") then
+			local relativePosition = descendant.Position - center
+			local projection = relativePosition:Dot(bestAxis)
+			local partState = {
+				part = descendant,
+				startCFrame = descendant.CFrame,
+				startAnchored = descendant.Anchored,
+				relativePosition = relativePosition,
+				projection = projection,
+				halfExtent = projectedHalfExtent(descendant, bestAxis),
+				height = relativePosition:Dot(pivot.UpVector),
+				heightHalfExtent = projectedHalfExtent(descendant, pivot.UpVector),
+				length = relativePosition:Dot(lengthAxis),
+				lengthHalfExtent = projectedHalfExtent(descendant, lengthAxis),
+				side = projection < 0 and -1 or (projection > 0 and 1 or 0),
+				maxTravel = 0,
+				moves = false,
+			}
+			table.insert(parts, partState)
+			if projection < -0.001 then
+				table.insert(leftParts, partState)
+			elseif projection > 0.001 then
+				table.insert(rightParts, partState)
+			end
+		end
+	end
+
+	local function findClosestMirrored(source, candidates)
+		local mirroredPosition = source.relativePosition - (bestAxis * (2 * source.projection))
+		local closest = nil
+		local closestDistance = math.huge
+		local secondClosestDistance = math.huge
+		for _, candidate in candidates do
+			local distance = (candidate.relativePosition - mirroredPosition).Magnitude
+			if distance < closestDistance then
+				secondClosestDistance = closestDistance
+				closest = candidate
+				closestDistance = distance
+			elseif distance < secondClosestDistance then
+				secondClosestDistance = distance
+			end
+		end
+		return closest, closestDistance, secondClosestDistance
+	end
+
+	local function getGap(leftState, rightState)
+		local leftInwardEdge = leftState.projection + leftState.halfExtent
+		local rightInwardEdge = rightState.projection - rightState.halfExtent
+		return rightInwardEdge - leftInwardEdge
+	end
+
+	local function travelStaysSafe(partState, travel)
+		return travel >= 0 and travel <= math.abs(partState.projection) + 0.001
+	end
+
+	for _, leftState in leftParts do
+		local rightState, mirrorDistance, nextRightDistance = findClosestMirrored(leftState, rightParts)
+		if rightState and not rightState.moves then
+			local reverseMatch, _, nextLeftDistance = findClosestMirrored(rightState, leftParts)
+			local mirrorTolerance = math.max(
+				0.25,
+				math.min(leftState.part.Size.Magnitude, rightState.part.Size.Magnitude) * 0.15
+			)
+			local matchIsUnambiguous = nextRightDistance - mirrorDistance > 0.001
+				and nextLeftDistance - mirrorDistance > 0.001
+			local gap = getGap(leftState, rightState)
+			local travel = gap * 0.5
+
+			if reverseMatch == leftState
+				and matchIsUnambiguous
+				and mirrorDistance <= mirrorTolerance
+				and gap >= 0
+				and travelStaysSafe(leftState, travel)
+				and travelStaysSafe(rightState, travel)
+			then
+				leftState.maxTravel = travel
+				leftState.moves = true
+				rightState.maxTravel = travel
+				rightState.moves = true
+			end
+		end
+	end
+
+	local function findFallbackOpponent(sourceState, candidates)
+		local bestCandidate = nil
+		local bestSourceTravel = nil
+		local bestCandidateTravel = nil
+		local bestScore = math.huge
+		local mirroredPosition = sourceState.relativePosition - (bestAxis * (2 * sourceState.projection))
+
+		for _, candidateState in candidates do
+			local heightDifference = math.abs(sourceState.height - candidateState.height)
+			local lengthDifference = math.abs(sourceState.length - candidateState.length)
+			local heightTolerance = sourceState.heightHalfExtent + candidateState.heightHalfExtent + 0.25
+			local lengthTolerance = sourceState.lengthHalfExtent + candidateState.lengthHalfExtent + 0.25
+			local smallerExtent = math.min(sourceState.halfExtent, candidateState.halfExtent)
+			local largerExtent = math.max(sourceState.halfExtent, candidateState.halfExtent)
+			local extentRatio = largerExtent > 0 and smallerExtent / largerExtent or 0
+			local leftState = sourceState.side < 0 and sourceState or candidateState
+			local rightState = sourceState.side > 0 and sourceState or candidateState
+			local gap = getGap(leftState, rightState)
+			local candidateTravel = candidateState.moves and candidateState.maxTravel or gap * 0.5
+			local sourceTravel = gap - candidateTravel
+
+			if heightDifference <= heightTolerance
+				and lengthDifference <= lengthTolerance
+				and extentRatio >= 0.2
+				and gap >= 0
+				and travelStaysSafe(sourceState, sourceTravel)
+				and travelStaysSafe(candidateState, candidateTravel)
+			then
+				local mirrorDistance = (candidateState.relativePosition - mirroredPosition).Magnitude
+				local extentDifference = math.abs(sourceState.halfExtent - candidateState.halfExtent)
+				local score = mirrorDistance + heightDifference + lengthDifference + (extentDifference * 0.25)
+				if score < bestScore then
+					bestCandidate = candidateState
+					bestSourceTravel = sourceTravel
+					bestCandidateTravel = candidateTravel
+					bestScore = score
+				end
+			end
+		end
+
+		return bestCandidate, bestSourceTravel, bestCandidateTravel
+	end
+
+	for _, partState in parts do
+		if not partState.moves and partState.side ~= 0 then
+			local candidates = partState.side < 0 and rightParts or leftParts
+			local opponentState, partTravel, opponentTravel = findFallbackOpponent(partState, candidates)
+			if opponentState then
+				partState.maxTravel = partTravel
+				partState.moves = true
+				if not opponentState.moves then
+					opponentState.maxTravel = opponentTravel
+					opponentState.moves = true
+				end
+			end
+		end
+	end
+
+	local requestedTravel = {}
+	for _, partState in parts do
+		requestedTravel[partState] = partState.maxTravel
+	end
+
+	for _, partState in parts do
+		if partState.moves then
+			local candidates = partState.side < 0 and rightParts or leftParts
+			local safeTravel = math.min(partState.maxTravel, math.abs(partState.projection))
+			for _, opponentState in candidates do
+				local heightRangesOverlap = math.abs(partState.height - opponentState.height)
+					<= partState.heightHalfExtent + opponentState.heightHalfExtent + 0.001
+				local lengthRangesOverlap = math.abs(partState.length - opponentState.length)
+					<= partState.lengthHalfExtent + opponentState.lengthHalfExtent + 0.001
+				if heightRangesOverlap and lengthRangesOverlap then
+					local leftState = partState.side < 0 and partState or opponentState
+					local rightState = partState.side > 0 and partState or opponentState
+					local opponentTravel = opponentState.moves and requestedTravel[opponentState] or 0
+					safeTravel = math.min(safeTravel, getGap(leftState, rightState) - opponentTravel)
+				end
+			end
+			partState.maxTravel = math.max(0, safeTravel)
+			partState.moves = partState.maxTravel > 0.001
+		end
+	end
+
+	for _, partState in parts do
+		if not partState.moves then
+			warnLoop(string.format(
+				"CrusherSquasher part excluded from animation; no safe opposite-side travel exists: %s",
+				partState.part:GetFullName()
+			))
+		end
+	end
+
+	return {
+		center = center,
+		axis = bestAxis,
+		parts = parts,
+	}
+end
+
+local function applyCrusherClosure(restState, progress)
+	local clampedProgress = math.clamp(progress, 0, 1)
+	for _, partState in restState.parts do
+		if partState.part.Parent then
+			partState.part.CFrame = partState.startCFrame
+		end
+	end
+
+	for _, partState in restState.parts do
+		if partState.moves and partState.part.Parent then
+			local inwardOffset = restState.axis * (-partState.side * partState.maxTravel * clampedProgress)
+			partState.part.CFrame = partState.startCFrame + inwardOffset
+		end
+	end
+end
+
+local crusherStudioRestState = captureCrusherRestState()
+
+local function getVerticalSizeDimension(part)
+	local axes = {
+		{ dimension = "X", alignment = math.abs(part.CFrame.RightVector:Dot(Vector3.yAxis)) },
+		{ dimension = "Y", alignment = math.abs(part.CFrame.UpVector:Dot(Vector3.yAxis)) },
+		{ dimension = "Z", alignment = math.abs(part.CFrame.LookVector:Dot(Vector3.yAxis)) },
+	}
+	local best = axes[1]
+	for index = 2, #axes do
+		if axes[index].alignment > best.alignment then
+			best = axes[index]
+		end
+	end
+	return best.dimension
+end
+
+local function captureCarCrushState(centerPosition)
+	local carPivot = getPivot(crushableCar)
+	local centeredPivot = CFrame.new(centerPosition) * (carPivot - carPivot.Position)
+	pivotTo(crushableCar, centeredPivot)
+
+	local parts = {}
+	local carParts = {}
+	addBaseParts(crushableCar, carParts)
+	for part in carParts do
+		table.insert(parts, {
+			part = part,
+			relativeCFrame = centeredPivot:ToObjectSpace(part.CFrame),
+			startSize = part.Size,
+			verticalDimension = getVerticalSizeDimension(part),
+		})
+	end
+
+	return {
+		centerPosition = centerPosition,
+		startRotation = centeredPivot - centeredPivot.Position,
+		parts = parts,
+	}
+end
+
+local function applyCarCrushPose(carState, elapsedSeconds, closureProgress)
+	local spinRadians = math.rad(CAR_SPIN_SPEED_DEGREES_PER_SECOND) * elapsedSeconds
+	local spinningPivot = CFrame.new(carState.centerPosition)
+		* CFrame.Angles(0, spinRadians, 0)
+		* carState.startRotation
+	local flattenProgress = math.clamp((closureProgress - 0.7) / 0.3, 0, 1)
+	flattenProgress = TweenService:GetValue(flattenProgress, Enum.EasingStyle.Quad, Enum.EasingDirection.In)
+	local verticalScale = 1 - (flattenProgress * 0.8)
+
+	for _, partState in carState.parts do
+		local part = partState.part
+		if part.Parent then
+			local targetCFrame = spinningPivot * partState.relativeCFrame
+			local targetPosition = targetCFrame.Position
+			local verticalOffset = targetPosition.Y - carState.centerPosition.Y
+			local compressedPosition = targetPosition + Vector3.new(0, verticalOffset * (verticalScale - 1), 0)
+			part.CFrame = CFrame.new(compressedPosition) * targetCFrame.Rotation
+
+			local compressedLength = math.max(
+				0.05,
+				getSizeDimension(partState.startSize, partState.verticalDimension) * verticalScale
+			)
+			part.Size = withExtendedDimension(partState.startSize, partState.verticalDimension, compressedLength)
+		end
+	end
+end
+
+local function animateCrusher(restState, carState, startProgress, targetProgress, duration)
+	local alpha = Instance.new("NumberValue")
+	local connection = alpha:GetPropertyChangedSignal("Value"):Connect(function()
+		local linearProgress = alpha.Value
+		local easedProgress = TweenService:GetValue(linearProgress, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut)
+		local closureProgress = startProgress + ((targetProgress - startProgress) * easedProgress)
+		applyCrusherClosure(restState, closureProgress)
+		if carState and crushableCar and crushableCar.Parent then
+			applyCarCrushPose(carState, linearProgress * duration, closureProgress)
+		end
+	end)
+	local movement = TweenService:Create(alpha, TweenInfo.new(duration, Enum.EasingStyle.Linear), { Value = 1 })
+	movement:Play()
+	movement.Completed:Wait()
+	connection:Disconnect()
+	alpha:Destroy()
+	applyCrusherClosure(restState, targetProgress)
+end
+
+local function crushCarInCrusher()
+	for _, partState in crusherStudioRestState.parts do
+		partState.part.Anchored = true
+	end
+	applyCrusherClosure(crusherStudioRestState, 0)
+
+	local dropPosition = getPivot(dropPoint).Position
+	local centeredPosition = dropPosition
+		+ crusherStudioRestState.axis * ((crusherStudioRestState.center - dropPosition):Dot(crusherStudioRestState.axis))
+	local carCrushState = captureCarCrushState(centeredPosition)
+	animateCrusher(crusherStudioRestState, carCrushState, 0, 1, CRUSH_DURATION_SECONDS)
+	task.wait(CRUSHER_CLOSED_HOLD_SECONDS)
+
+	if crushableCar and crushableCar.Parent then
+		crushableCar:Destroy()
+	end
+	crushableCar = nil
+	carPart = nil
+
+	animateCrusher(crusherStudioRestState, nil, 1, 0, CRUSH_DURATION_SECONDS * 0.35)
+	for _, partState in crusherStudioRestState.parts do
+		if partState.part.Parent then
+			partState.part.CFrame = partState.startCFrame
+			partState.part.Anchored = partState.startAnchored
+		end
+	end
 end
 
 local function captureCarTemplate()
@@ -659,9 +1040,7 @@ local function runSequence()
 	diagnostic(string.format("final horizontal assembly distance to CrusherDropPoint=%.3f", finalHorizontalDistance))
 
 	throwCarIntoCrusher()
-	crushableCar:Destroy()
-	crushableCar = nil
-	carPart = nil
+	crushCarInCrusher()
 
 	collectorPrompt.Enabled = false
 	animateCranePose(restState, yaw, 0, targetExtensionDistance, 0, outwardAxisLocal, ROTATE_SECONDS, nil)
